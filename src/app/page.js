@@ -1,11 +1,10 @@
 "use client";
 
-// PERHATIKAN: Kita membuang useReadContract agar tidak ada lagi error caching 0
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
-import { getContract, readContract } from "thirdweb";
 import { defineChain } from "thirdweb/chains";
 import { client } from "../client";
 import { useState, useEffect } from "react";
+import { readContract } from "thirdweb";
 
 import HutModal from "../components/HutModal";
 import ShopModal from "../components/ShopModal";
@@ -38,96 +37,56 @@ export default function BabesMap() {
     const [selectedTokenIndex, setSelectedTokenIndex] = useState(0); 
     
     const [userNFTIds, setUserNFTIds] = useState([]);
-    // State baru yang lebih kuat: loading -> granted -> denied
     const [authStatus, setAuthStatus] = useState("loading"); 
 
-    const nftContract = getContract({
-        client: client,
-        chain: robinhoodChain,
-        address: NFT_CONTRACT_ADDRESS,
-    });
-
-    // SISTEM PEMERIKSAAN IMPERATIF (MENOLAK NYANGKUT DI 0)
+    // SISTEM DETEKSI ASLI TANPA DUMMY
     useEffect(() => {
-        // Jangan lakukan apa-apa jika dompet belum nyambung sempurna
         if (!account?.address) {
             setAuthStatus("loading");
             return;
         }
 
-        async function verifyAssets() {
+        async function fetchRealAssets() {
             setAuthStatus("loading");
-            let confirmedIds = [];
+            let foundIds = [];
+            
+            console.log("🕵️ Memulai Pencarian Aset Asli untuk:", account.address);
 
-            // METODE 1: Dobrak Blockscout API
+            // METODE 1: Langsung tembak Blockscout API (Harusnya aman dari CORS di Vercel)
             try {
                 const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/nft?collections=${NFT_CONTRACT_ADDRESS}`;
+                console.log("📡 Memanggil API Blockscout:", url);
+                
                 const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+                
                 const data = await response.json();
+                console.log("📦 Jawaban Blockscout:", data);
                 
                 if (data.items && data.items.length > 0) {
-                    confirmedIds = data.items.map(item => {
-                        const id = item.id || item.token_id || (item.token_instance && item.token_instance.id) || 0;
-                        return { id: Number(id) };
-                    }).filter(item => item.id !== 0);
-                    console.log("✅ Ditemukan via API Blockscout:", confirmedIds);
+                    foundIds = data.items.map(item => ({ 
+                        id: Number(item.id || item.token_id || (item.token_instance && item.token_instance.id)) 
+                    })).filter(item => !isNaN(item.id));
                 }
             } catch (err) {
-                console.warn("⚠️ API Blockscout gagal (Mungkin CORS). Lanjut ke Metode 2...");
+                console.error("❌ Metode 1 (API) Gagal:", err);
             }
 
-            // METODE 2: Baca Langsung dari Smart Contract (Hanya jika Metode 1 gagal)
-            if (confirmedIds.length === 0) {
-                try {
-                    // Pengecekan saldo tanpa hook reaktif!
-                    const bal = await readContract({
-                        contract: nftContract,
-                        method: "function balanceOf(address owner) view returns (uint256)",
-                        params: [account.address]
-                    });
-                    
-                    const balanceNum = Number(bal);
-                    console.log("📈 Saldo ditemukan di On-Chain:", balanceNum);
-
-                    if (balanceNum > 0) {
-                        // Jika saldo ada, cari tahu ID-nya
-                        for (let i = 0; i < balanceNum; i++) {
-                            try {
-                                const tokenId = await readContract({
-                                    contract: nftContract,
-                                    method: "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-                                    params: [account.address, BigInt(i)]
-                                });
-                                confirmedIds.push({ id: Number(tokenId) });
-                            } catch (e) {
-                                // Lewati jika kontrak tidak mendukung fungsi ini
-                            }
-                        }
-                        
-                        // ANTI-STUCK: Jika saldo > 0 tapi gagal mengambil ID, paksa masuk dengan ID darurat!
-                        if (confirmedIds.length === 0) {
-                            console.warn("⚠️ Saldo ada, tapi indexer gagal. Memaksa masuk...");
-                            confirmedIds = [{ id: 20 }]; 
-                        }
-                    }
-                } catch (err) {
-                    console.error("❌ Metode On-Chain gagal total:", err);
-                }
-            }
-
-            // PUTUSAN TERAKHIR (PENENTU LAYAR)
-            if (confirmedIds.length > 0) {
-                setUserNFTIds(confirmedIds);
-                setAuthStatus("granted"); // PINTU DIBUKA
+            // KEPUTUSAN FINAL (TANPA SUNTIKAN DUMMY)
+            if (foundIds.length > 0) {
+                console.log("✅ Akses Diberikan. ID Asli Ditemukan:", foundIds);
+                setUserNFTIds(foundIds);
+                setAuthStatus("granted");
             } else {
-                setAuthStatus("denied");  // PINTU DITUTUP
+                console.warn("⛔ Akses Ditolak. Tidak ada NFT yang terdeteksi.");
+                setUserNFTIds([]);
+                setAuthStatus("denied"); 
             }
         }
         
-        verifyAssets();
-    }, [account?.address]); // Hanya jalankan ulang jika alamat dompet berubah
+        fetchRealAssets();
+    }, [account?.address]); 
 
-    // --- LOGIKA UI BAWAH TETAP SAMA ---
     useEffect(() => {
         const savedState = JSON.parse(localStorage.getItem('babesGameState'));
         if (savedState) {
@@ -164,15 +123,16 @@ export default function BabesMap() {
     }
 
     if (!isLoaded || authStatus === "loading") {
-        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Verifying Assets on Robinhood Chain...</div>;
+        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Scanning Real Wallet Data...</div>;
     }
 
+    // JIKA BENAR-BENAR KOSONG DI BLOCKCHAIN, MUNCULKAN INI
     if (authStatus === "denied") {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
                 <h2 style={{ color: 'var(--powder-pink)', fontFamily: "'Lilita One', cursive", fontSize: '28px', marginBottom: '15px' }}>ACCESS DENIED 🏝️</h2>
                 <p style={{ color: '#fff', fontSize: '16px', marginBottom: '25px', maxWidth: '400px', lineHeight: '1.5' }}>
-                    Sistem benar-benar mendeteksi 0 saldo NFT Babes in the Hood.
+                    Sistem mendeteksi 0 saldo NFT Babes in the Hood. Pastikan kamu memakai dompet yang benar.
                 </p>
                 <ConnectButton client={client} />
             </div>
