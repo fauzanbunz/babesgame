@@ -39,7 +39,7 @@ export default function BabesMap() {
     const [userNFTIds, setUserNFTIds] = useState([]);
     const [authStatus, setAuthStatus] = useState("loading"); 
 
-    // SISTEM DETEKSI ASLI TANPA DUMMY
+    // SISTEM DETEKSI ASLI (ANTI ERROR 422)
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -52,10 +52,10 @@ export default function BabesMap() {
             
             console.log("🕵️ Memulai Pencarian Aset Asli untuk:", account.address);
 
-            // METODE 1: Langsung tembak Blockscout API (Harusnya aman dari CORS di Vercel)
+            // METODE 1: Jalur Token Balances (Universal, kebal dari penolakan Blockscout)
             try {
-                const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/nft?collections=${NFT_CONTRACT_ADDRESS}`;
-                console.log("📡 Memanggil API Blockscout:", url);
+                const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/token-balances`;
+                console.log("📡 Memanggil API Blockscout Balances:", url);
                 
                 const response = await fetch(url);
                 if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
@@ -63,16 +63,21 @@ export default function BabesMap() {
                 const data = await response.json();
                 console.log("📦 Jawaban Blockscout:", data);
                 
-                if (data.items && data.items.length > 0) {
-                    foundIds = data.items.map(item => ({ 
-                        id: Number(item.id || item.token_id || (item.token_instance && item.token_instance.id)) 
-                    })).filter(item => !isNaN(item.id));
+                // Menyaring kontrak Babes in the Hood secara manual
+                const bbhTokens = data.filter(item => 
+                    item.token && item.token.address.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase()
+                );
+                
+                if (bbhTokens.length > 0) {
+                    foundIds = bbhTokens.map(t => ({ 
+                        id: Number(t.token_instance?.id || t.token_id || 0) 
+                    })).filter(item => item.id !== 0 && !isNaN(item.id));
                 }
             } catch (err) {
                 console.error("❌ Metode 1 (API) Gagal:", err);
             }
 
-            // KEPUTUSAN FINAL (TANPA SUNTIKAN DUMMY)
+            // KEPUTUSAN FINAL
             if (foundIds.length > 0) {
                 console.log("✅ Akses Diberikan. ID Asli Ditemukan:", foundIds);
                 setUserNFTIds(foundIds);
