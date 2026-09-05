@@ -30,6 +30,9 @@ const defaultState = {
     stats: { babesEarned: 1000, itemsOwned: 0 }
 };
 
+// FUNGSI JEDAH WAKTU (DELAY) UNTUK MENGHINDARI RATE LIMIT ALCHEMY (429)
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export default function BabesMap() {
     const account = useActiveAccount();
     const [gameState, setGameState] = useState(defaultState);
@@ -98,9 +101,9 @@ export default function BabesMap() {
                     }
 
                     if (foundIds.length === 0) {
-                        console.warn(`📡 Activating Smart Radar to find ${balanceNum} NFTs...`);
+                        console.warn(`📡 Activating Smart Radar with anti-rate-limit to find ${balanceNum} NFTs...`);
                         const MAX_SUPPLY = 666;
-                        const BATCH_SIZE = 50; 
+                        const BATCH_SIZE = 25; // Diperkecil sedikit agar aman
 
                         for (let i = 1; i <= MAX_SUPPLY; i += BATCH_SIZE) {
                             const batch = [];
@@ -120,6 +123,8 @@ export default function BabesMap() {
                                 console.log("🎯 All NFTs found! Shutting down radar.");
                                 break; 
                             }
+                            // Jeda 500ms antar batch radar agar tidak kena 429
+                            await delay(500);
                         }
                     }
 
@@ -144,16 +149,17 @@ export default function BabesMap() {
         fetchRealAssets();
     }, [account?.address]); 
 
-    // AUTO-HARVESTER SCRIPT
+    // AUTO-HARVESTER SCRIPT (DENGAN JEDAH WAKTU / THROTTLE AMAN DARI ERROR 429)
     useEffect(() => {
         if (userNFTIds.length === 0) return;
 
         async function harvestWardrobe() {
-            console.log("👗 Harvesting wardrobe from all your NFTs...");
+            console.log("👗 Harvesting wardrobe safely with anti-429 delay...");
             let newInventory = { bikini: [], shades: [], bracelet: [], necklace: [], piercing: [] };
             const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
             const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
 
+            // Menggunakan for...of loop agar bisa diberi jeda (delay) satu per satu
             for (let nft of userNFTIds) {
                 try {
                     const uri = await readContract({
@@ -176,6 +182,10 @@ export default function BabesMap() {
                             }
                         });
                     }
+
+                    // REM UTAMA: Istirahat 1000ms (1 detik) setiap selesai mengambil 1 NFT metadata
+                    await delay(1000);
+
                 } catch (e) {
                     console.error("❌ Failed to harvest item for NFT #" + nft.id, e);
                 }
@@ -186,7 +196,7 @@ export default function BabesMap() {
                 localStorage.setItem('babesGameState', JSON.stringify(updatedState));
                 return updatedState;
             });
-            console.log("🛍️ Auto-Wardrobe filled:", newInventory);
+            console.log("🛍️ Auto-Wardrobe filled safely:", newInventory);
         }
         harvestWardrobe();
     }, [userNFTIds]); 
@@ -242,7 +252,7 @@ export default function BabesMap() {
     }
 
     if (!isLoaded || authStatus === "loading") {
-        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Activating Blockchain Radar...</div>;
+        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Activating Blockchain Radar (Safe Mode)...</div>;
     }
 
     if (authStatus === "error") {
