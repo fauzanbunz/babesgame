@@ -5,6 +5,8 @@ import { client } from "../client";
 import { useState, useEffect } from "react";
 import { readContract, getContract } from "thirdweb";
 import { getOwnedTokenIds } from "thirdweb/extensions/erc721";
+// TAMBAHAN: Senjata anti-CORS Thirdweb untuk mengisi lemari
+import { resolveScheme } from "thirdweb/storage"; 
 
 import HutModal from "../components/HutModal";
 import ShopModal from "../components/ShopModal";
@@ -33,7 +35,7 @@ export default function BabesMap() {
     const [authStatus, setAuthStatus] = useState("loading"); 
     const [errorDetail, setErrorDetail] = useState(""); 
 
-    // 1. SISTEM DETEKSI SUPER ON-CHAIN (Dengan Fallback RPC milikmu)
+    // 1. SISTEM DETEKSI (Menggunakan API token-balances yang terbukti sukses)
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -91,19 +93,19 @@ export default function BabesMap() {
 
                     if (foundIds.length === 0) {
                         try {
-                            // PERBAIKAN: Menggunakan endpoint /nft yang lebih stabil untuk membaca koleksi
-                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/nft`;
+                            // PERBAIKAN: Kembali menggunakan jalur token-balances yang terbukti kebal error
+                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/token-balances`;
                             const response = await fetch(url);
                             const data = await response.json();
                             
-                            const items = data.items || [];
+                            const items = Array.isArray(data) ? data : (data.items || []);
                             const bbhTokens = items.filter(item =>
                                 item?.token?.address?.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase()
                             );
                             
                             if (bbhTokens.length > 0) {
                                 foundIds = bbhTokens.map(t => ({ 
-                                    id: Number(t.id || t.token_id || 0) 
+                                    id: Number(t.token_instance?.id ?? t.token_id ?? 0) 
                                 })).filter(item => item.id !== 0 && !isNaN(item.id));
                             }
                         } catch (apiErr) {
@@ -135,7 +137,7 @@ export default function BabesMap() {
         fetchRealAssets();
     }, [account?.address]); 
 
-    // 2. SCRIPT AUTO-HARVESTER (MEMENUHI WARDROBE-MU)
+    // 2. SCRIPT AUTO-HARVESTER (Dilindungi Jalur VIP Thirdweb)
     useEffect(() => {
         if (userNFTIds.length === 0) return;
 
@@ -144,7 +146,6 @@ export default function BabesMap() {
             
             let newInventory = { bikini: [], shades: [], bracelet: [], necklace: [], piercing: [] };
             
-            // Menggunakan RPC pertama yang valid dari config-mu
             const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
             const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
 
@@ -156,14 +157,16 @@ export default function BabesMap() {
                         params: [nft.id]
                     });
                     
-                    let url = uri;
+                    let resolvedUrl = uri;
+                    
+                    // PERBAIKAN: Gunakan resolveScheme agar tidak diblokir CORS oleh gateway publik
                     if (uri.startsWith("ipfs://")) {
-                        url = uri.replace("ipfs://", "https://dweb.link/ipfs/");
+                        resolvedUrl = resolveScheme({ client, uri: uri }); 
                     } else if (uri.includes("mypinata.cloud")) {
-                        url = uri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://dweb.link/ipfs/");
+                        resolvedUrl = uri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://ipfs.io/ipfs/");
                     }
                     
-                    const res = await fetch(url);
+                    const res = await fetch(resolvedUrl);
                     const data = await res.json();
                     
                     if (data.attributes) {
@@ -171,7 +174,6 @@ export default function BabesMap() {
                             const type = attr.trait_type?.toLowerCase();
                             const val = attr.value;
                             
-                            // Jika ini kategori pakaian, masukkan ke lemari!
                             if (newInventory[type] && !newInventory[type].includes(val) && val !== "None") {
                                 newInventory[type].push(val);
                             }
