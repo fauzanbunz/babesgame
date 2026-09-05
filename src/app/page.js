@@ -16,7 +16,12 @@ const robinhoodChain = defineChain({
     id: 4663, 
     name: "Robinhood Chain",
     nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, 
-    rpc: "https://robinhood-mainnet.g.alchemy.com/v2/alch_EMaIvTiuZyumUrGHfFnFd",
+    // PERBAIKAN: pakai RPC publik resmi Robinhood Chain (tidak butuh API key).
+    // Sebelumnya pakai endpoint Alchemy dengan API key yang formatnya tidak
+    // lazim untuk Alchemy (biasanya key Alchemy tidak berprefix "alch_"),
+    // sehingga kemungkinan besar key tsb invalid/expired dan bikin semua
+    // readContract() gagal diam-diam -> selalu dianggap "denied".
+    rpc: "https://rpc.mainnet.chain.robinhood.com",
     blockExplorers: [{ name: "Blockscout", url: "https://robinhoodchain.blockscout.com" }]
 });
 
@@ -40,6 +45,7 @@ export default function BabesMap() {
     
     const [userNFTIds, setUserNFTIds] = useState([]);
     const [authStatus, setAuthStatus] = useState("loading"); 
+    const [errorDetail, setErrorDetail] = useState(""); // PERBAIKAN: simpan pesan error asli untuk debugging
 
     // SISTEM DETEKSI SUPER ON-CHAIN
     useEffect(() => {
@@ -125,8 +131,13 @@ export default function BabesMap() {
                     setAuthStatus("denied"); 
                 }
             } catch (err) {
+                // PERBAIKAN: sebelumnya error apapun (termasuk RPC gagal/network error)
+                // langsung dianggap "denied" (dikira saldo 0), padahal belum tentu.
+                // Sekarang dibedakan jadi status "error" supaya kelihatan jelas
+                // bahwa masalahnya di koneksi/RPC, bukan di kepemilikan NFT.
                 console.error("❌ Fatal Error saat membaca On-Chain:", err);
-                setAuthStatus("denied");
+                setErrorDetail(err?.message || String(err));
+                setAuthStatus("error");
             }
         }
         
@@ -170,6 +181,23 @@ export default function BabesMap() {
 
     if (!isLoaded || authStatus === "loading") {
         return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Interrogating Smart Contract...</div>;
+    }
+
+    // PERBAIKAN: layar khusus kalau yang gagal itu koneksi/RPC-nya,
+    // BUKAN karena saldo NFT memang 0. Ini yang paling penting untuk debugging.
+    if (authStatus === "error") {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
+                <h2 style={{ color: 'orange', fontFamily: "'Lilita One', cursive", fontSize: '28px', marginBottom: '15px' }}>GAGAL TERHUBUNG KE BLOCKCHAIN ⚠️</h2>
+                <p style={{ color: '#fff', fontSize: '16px', marginBottom: '10px', maxWidth: '400px', lineHeight: '1.5' }}>
+                    Ini BUKAN berarti NFT kamu tidak ada. Sistem gagal membaca data on-chain (RPC/network error), jadi statusnya belum bisa dipastikan.
+                </p>
+                <p style={{ color: '#ffcc00', fontSize: '12px', marginBottom: '25px', maxWidth: '400px', fontFamily: 'monospace' }}>
+                    Detail error: {errorDetail}
+                </p>
+                <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', cursor: 'pointer' }}>Coba Lagi</button>
+            </div>
+        );
     }
 
     // JIKA BENAR-BENAR KOSONG DI BLOCKCHAIN, MUNCULKAN INI
