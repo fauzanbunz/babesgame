@@ -261,12 +261,22 @@ export default function BabesMap() {
                 <img id="map-image" src="/map-babes.webp" alt="Babes Island Map" />
                 <img id="airplane" src="/plane.webp" alt="Flying Plane" />
                 
-                {/* LOKASI BANGUNAN PETA */}
-                <div className="building-label" style={{ left: '46%', top: '59%' }} onClick={() => setActiveModal('shop')}>THE SHOP</div>
-                <div className="building-label" style={{ left: '84%', top: '35%' }} onClick={() => setActiveModal('hut')}>THE HUT</div>
-                <div className="building-label" style={{ left: '60%', top: '30%' }} onClick={() => setActiveModal('club')}>THE CLUB</div>
-                <div className="building-label" style={{ left: '20%', top: '65%' }} onClick={() => setActiveModal('cafe')}>THE CAFE</div>
-                <div className="building-label" style={{ left: '15%', top: '25%' }} onClick={() => setActiveModal('guard')}>GUARD TOWER</div>
+               {/* LOKASI BANGUNAN PETA YANG SUDAH DIKALIBRASI */}
+                
+                {/* Toko Baju */}
+                <div className="building-label" style={{ left: '48%', top: '57%' }} onClick={() => setActiveModal('shop')}>THE SHOP</div>
+                
+                {/* Menara Penjaga Pantai */}
+                <div className="building-label" style={{ left: '54%', top: '62%' }} onClick={() => setActiveModal('guard')}>GUARD TOWER</div>
+                
+                {/* Bar Payung Jerami */}
+                <div className="building-label" style={{ left: '61%', top: '45%' }} onClick={() => setActiveModal('cafe')}>THE CAFE</div>
+                
+                {/* Gedung Bulat Neon */}
+                <div className="building-label" style={{ left: '72%', top: '25%' }} onClick={() => setActiveModal('club')}>BABES CLUB</div>
+
+                {/* Rumah Utama Tiki */}
+                <div className="building-label" style={{ left: '80%', top: '33%' }} onClick={() => setActiveModal('hut')}>THE HUT</div>
             </div>
 
             {activeModal && <div id="modal-overlay" style={{ display: 'block', opacity: 1 }} onClick={() => setActiveModal(null)}></div>}
