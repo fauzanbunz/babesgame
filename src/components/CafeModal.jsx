@@ -1,34 +1,32 @@
 import { useState, useEffect } from 'react';
 import { itemDB, rarityColors } from '../data/items';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase Client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function CafeModal({ gameState, updateGameState, showToast, onClose }) {
     const [mainTab, setMainTab] = useState('trade'); 
     const [tradeTab, setTradeTab] = useState('market'); 
     
     const [chatInput, setChatInput] = useState('');
-    const [chatHistory, setChatHistory] = useState([
-        { user: '[Babes #099] Alice', text: 'Anyone trading a Pirate Booty bikini?' },
-        { user: '[Babes #420] Bob', text: 'Check the Public Market, I just listed one!' }
-    ]);
+    const [chatHistory, setChatHistory] = useState([]); // Now starts empty, will fetch from DB
 
     const [myOffer, setMyOffer] = useState(null);
     const [targetWant, setTargetWant] = useState(null);
     const [isSelectingFor, setIsSelectingFor] = useState(null); 
 
-    // PERBAIKAN: Membaca data Market dari Local Storage agar tidak hilang
     const [marketTrades, setMarketTrades] = useState(() => {
         const savedTrades = localStorage.getItem('babesMarketTrades');
-        if (savedTrades) {
-            return JSON.parse(savedTrades);
-        }
+        if (savedTrades) return JSON.parse(savedTrades);
         return [
             { id: 101, user: 'Babes #099', offer: 'Neon Bikini', want: 'Multichain Golden', isMine: false },
-            { id: 102, user: 'Babes #555', offer: 'Naked Black', want: 'Pirate Booty', isMine: false },
-            { id: 103, user: 'Babes #777', offer: 'Retro Blue', want: 'Neon Bikini', isMine: false }
+            { id: 102, user: 'Babes #555', offer: 'Naked Black', want: 'Pirate Booty', isMine: false }
         ];
     });
 
-    // PERBAIKAN: Menyimpan secara otomatis ke Local Storage setiap ada perubahan Trade
     useEffect(() => {
         localStorage.setItem('babesMarketTrades', JSON.stringify(marketTrades));
     }, [marketTrades]);
@@ -36,6 +34,7 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
     const IPFS_BASE = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
     const folderMap = { bikini: '04_Bikini', shades: '07_Shades', bracelet: '09_Bracelet', necklace: '05_Necklace', piercing: '03_Piercing' };
 
+    // QUEST VERIFICATION
     useEffect(() => {
         if (!gameState.quests.visitedCafe) {
             updateGameState('player', { xp: gameState.player.xp + 10 });
@@ -44,18 +43,62 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         }
     }, []);
 
-    const handleSendChat = () => {
+    // SUPABASE: FETCH INITIAL CHAT & SUBSCRIBE TO LIVE UPDATES
+    useEffect(() => {
+        const fetchInitialMessages = async () => {
+            const { data, error } = await supabase
+                .from('global_chat')
+                .select('*')
+                .order('created_at', { ascending: true })
+                .limit(50);
+            
+            if (data && !error) {
+                const formatted = data.map(msg => ({ user: msg.user_name, text: msg.message }));
+                setChatHistory(formatted);
+            }
+        };
+
+        fetchInitialMessages();
+
+        // Listen for new messages in real-time
+        const channel = supabase
+            .channel('public:global_chat')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'global_chat' }, (payload) => {
+                setChatHistory(prev => [...prev, { user: payload.new.user_name, text: payload.new.message }]);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel); // Cleanup when modal closes
+        };
+    }, []);
+
+    // SUPABASE: SEND MESSAGE TO DATABASE
+    const handleSendChat = async () => {
         if (chatInput.trim() === '') return;
-        setChatHistory([...chatHistory, { user: `[${gameState.player.name}] You`, text: chatInput }]);
-        setChatInput('');
         
-        if (!gameState.quests.chatted) {
-            updateGameState('player', { xp: gameState.player.xp + 20 });
-            updateGameState('quests', { chatted: true });
-            showToast('Quest Verified: Talk to Babes! (+20 XP)');
+        const msgToSend = chatInput;
+        setChatInput(''); // Clear input instantly for better UX
+        
+        const userNameFormat = `[${gameState.player.name}]`;
+
+        const { error } = await supabase
+            .from('global_chat')
+            .insert([{ user_name: userNameFormat, message: msgToSend }]);
+
+        if (error) {
+            showToast("Network Error: Failed to send message.");
+            console.error("Supabase Error:", error);
+        } else {
+            if (!gameState.quests.chatted) {
+                updateGameState('player', { xp: gameState.player.xp + 20 });
+                updateGameState('quests', { chatted: true });
+                showToast('Quest Verified: Talk to Babes! (+20 XP)');
+            }
         }
     };
 
+    // TRADE MARKET LOGIC
     const getAvailableInventory = () => {
         const available = [];
         ['bikini', 'shades', 'bracelet', 'necklace', 'piercing'].forEach(cat => {
@@ -177,13 +220,27 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
 
                     {mainTab === 'chat' && (
                         <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                            <div className="chat-list" style={{ flex: 1 }}>
-                                {chatHistory.map((chat, idx) => (
-                                    <div key={idx} className="chat-msg"><span className="chat-user">{chat.user}:</span> {chat.text}</div>
-                                ))}
+                            <div className="chat-list" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                                {chatHistory.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '20px' }}>Loading chat history...</div>
+                                ) : (
+                                    chatHistory.map((chat, idx) => (
+                                        <div key={idx} className="chat-msg">
+                                            <span className="chat-user">{chat.user}:</span> {chat.text}
+                                        </div>
+                                    ))
+                                )}
                             </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <input type="text" className="input-text" style={{ marginBottom: 0 }} placeholder="Say hello..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                <input 
+                                    type="text" 
+                                    className="input-text" 
+                                    style={{ marginBottom: 0 }} 
+                                    placeholder="Say hello to the island..." 
+                                    value={chatInput} 
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
+                                />
                                 <button className="btn" onClick={handleSendChat} style={{ width: '120px', marginBottom: 0 }}>SEND</button>
                             </div>
                         </div>
