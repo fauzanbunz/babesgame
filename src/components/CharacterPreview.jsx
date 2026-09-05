@@ -3,13 +3,10 @@ import { getContract } from "thirdweb";
 import { useReadContract } from "thirdweb/react";
 import { client } from "../client";
 import { itemDB } from '../data/items';
-// PERBAIKAN: pakai config RPC/chain yang SAMA dengan page.js, bukan definisi
-// sendiri di file ini. Sebelumnya di sini masih pakai API key Alchemy yang
-// rusak/placeholder, jadi tokenURI() selalu gagal diam-diam -> preview NFT
-// dan traits tidak pernah muncul walau login sudah berhasil.
 import { NFT_CONTRACT_ADDRESS, robinhoodChain } from "../chain-config";
 
 export default function CharacterPreview({ equipped, activeNFT, onAttributesChange }) {
+  // GATEWAY VIP (PINATA PRIBADI): Tetap dipertahankan KHUSUS untuk me-render gambar trait (PNG) 
   const ipfsBaseUrl = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
   const [nftAttributes, setNftAttributes] = useState([]);
 
@@ -30,8 +27,6 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
 
   useEffect(() => {
     if (tokenUriError) {
-      // PERBAIKAN: sebelumnya error di sini didiamkan begitu saja (silent fail),
-      // sekarang minimal di-log supaya kelihatan di console kalau tokenURI gagal dibaca.
       console.error("❌ Gagal membaca tokenURI untuk token #" + tokenId + ":", tokenUriError);
     }
   }, [tokenUriError, tokenId]);
@@ -41,50 +36,45 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
       if (!tokenUri) return;
       try {
         let url = tokenUri;
-        // DIPERBAIKI: Menggunakan Pinata Gateway milikmu agar tidak diblokir
+        
+        // DIPERBAIKI: Membelokkan permintaan JSON ke Gateway Publik (dweb.link) agar tidak kena 403 Pinata
         if (tokenUri.startsWith("ipfs://")) {
-          url = tokenUri.replace("ipfs://", "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/");
+          url = tokenUri.replace("ipfs://", "https://dweb.link/ipfs/");
         }
+        // Jaring pengaman ekstra: jika URL aslinya sudah terlanjur Pinata, paksa belokkan ke Publik
+        url = url.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://dweb.link/ipfs/");
+        
         const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP Error! status: ${res.status}`);
+
         const data = await res.json();
         if (data.attributes) {
           setNftAttributes(data.attributes);
-          // PERBAIKAN: kirim juga ke parent (HutModal) supaya bisa ditampilkan
-          // sebagai daftar traits teks di sisi kanan preview.
           if (onAttributesChange) onAttributesChange(data.attributes);
         }
       } catch (err) {
-        console.error("Gagal memuat metadata NFT:", err);
+        console.error("❌ Gagal memuat metadata NFT:", err);
       }
     }
     fetchMetadata();
-  }, [tokenUri]);
+  }, [tokenUri, onAttributesChange]);
 
   const getTraitValue = (traitType) => {
     const attr = nftAttributes.find(a => a.trait_type?.toLowerCase() === traitType.toLowerCase());
     return attr ? attr.value : null;
   };
 
-  // PERBAIKAN: kalau value trait tidak terdaftar di itemDB (wajar untuk trait dasar
-  // seperti Background/Skin/Mouth/Hair yang bukan barang di Shop), fallback pakai
-  // value trait itu sendiri sebagai nama file -- asumsi nama file PNG di Pinata
-  // sama persis dengan value trait di metadata NFT.
   const getFileName = (val) => {
     if (!val) return null;
     return itemDB[val]?.fileName || val;
   };
 
-  // 4 trait dasar yang TIDAK bisa di-custom -- selalu tampilkan sesuai trait asli NFT.
   const bgFile = getFileName(getTraitValue('Background'));
   const skinFile = getFileName(getTraitValue('Skin'));
   const mouthFile = getFileName(getTraitValue('Mouth'));
   const hairFile = getFileName(getTraitValue('Hair'));
-  // Piercing juga trait tetap (bukan salah satu dari 4 kategori yang bisa di-custom).
   const piercingFile = getFileName(getTraitValue('Piercing'));
 
-  // Hanya 4 kategori ini yang bisa di-custom/equip lewat Wardrobe: Bikini, Shades,
-  // Necklace, Bracelet. Kalau pemain sudah equip item dari inventory, pakai itu;
-  // kalau belum, tampilkan trait asli NFT-nya.
   const getActiveTraitFile = (category, defaultVal) => {
     const equippedItem = equipped?.[category];
     if (equippedItem && itemDB[equippedItem]) {
@@ -104,23 +94,25 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', aspectRatio: '1 / 1', backgroundColor: '#111', overflow: 'hidden', borderRadius: '14px' }}>
-        {/* PERBAIKAN: tampilkan status kalau belum ada gambar sama sekali, supaya kotak
-            tidak terlihat "kosong tanpa alasan" saat loading/gagal/tidak ada trait. */}
+        
         {tokenId === null && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', textAlign: 'center', padding: '10px' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', textAlign: 'center', padding: '10px', zIndex: 100 }}>
                 Tidak ada NFT dipilih
             </div>
         )}
+        
         {tokenId !== null && isTokenUriLoading && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', zIndex: 100 }}>
                 Memuat metadata NFT...
             </div>
         )}
+        
         {tokenId !== null && !isTokenUriLoading && tokenUriError && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', textAlign: 'center', padding: '10px' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', textAlign: 'center', padding: '10px', zIndex: 100 }}>
                 Gagal memuat NFT #{tokenId}
             </div>
         )}
+        
         {bgFile && <img src={`${ipfsBaseUrl}/01_Background/${encodeURIComponent(bgFile)}.png`} style={layerStyle(0)} alt="Background" />}
         {skinFile && <img src={`${ipfsBaseUrl}/02_Skin/${encodeURIComponent(skinFile)}.png`} style={layerStyle(10)} alt="Skin" />}
         {mouthFile && <img src={`${ipfsBaseUrl}/08_Mouth/${encodeURIComponent(mouthFile)}.png`} style={layerStyle(15)} alt="Mouth" />}
