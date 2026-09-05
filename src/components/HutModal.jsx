@@ -6,11 +6,9 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
     const [mainTab, setMainTab] = useState('wardrobe');
     const [subTab, setSubTab] = useState('bikini');
     
-    // Fitur ganti nama ini sudah otomatis menjadi nama profil global (Satu untuk semua)
     const [nameInput, setNameInput] = useState(gameState.player.name !== "Babes #..." ? gameState.player.name : '');
     const [nftTraits, setNftTraits] = useState([]);
     
-    // STATE BARU: Untuk memunculkan Popup interaktif di Wardrobe
     const [itemPopup, setItemPopup] = useState(null); 
 
     const IPFS_BASE = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
@@ -20,7 +18,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
 
     const handleSelectToken = (index) => {
         setNftTraits([]);
-        // Hapus status kostumisasi jika mengganti NFT agar tidak tumpang tindih
         updateGameState('equipped', { bikini: null, shades: null, bracelet: null, necklace: null, piercing: null });
         setSelectedTokenIndex(index);
     };
@@ -41,7 +38,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
         showToast("Claimed: +25 $babes & +10 XP");
     };
 
-    // FUNGSI POPUP BARU
     const handleActionClick = (itemName, cat) => {
         setItemPopup({ itemName, category: cat });
     };
@@ -61,16 +57,14 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
     };
 
     const handleMint = () => {
-        // Logika Smart Contract ditaruh di sini nantinya
         showToast("MINT Init... (Membutuhkan Konfirmasi Wallet & Burn NFT)");
     };
 
-    // LOGIKA TRAIT DINAMIS
     const getDisplayTrait = (cat, originalVal) => {
         const eq = gameState.equipped[cat];
-        if (eq === 'STRIPPED') return 'None'; // Jika sengaja dilepas
-        if (eq) return eq; // Jika memakai baju baru dari leari
-        return originalVal || 'None'; // Default bawaan NFT
+        if (eq === 'STRIPPED') return 'None'; 
+        if (eq) return eq; 
+        return originalVal || 'None'; 
     };
 
     const renderInventory = (cat) => {
@@ -96,11 +90,18 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                 <div key={itemName} className="item-square" onClick={() => handleActionClick(itemName, cat)} style={{ borderColor, background: bgStyle, display: 'flex', flexDirection: 'column', padding: '12px', cursor: 'pointer' }}>
                     {item && <div className="rarity-badge" style={{ background: rarityColors[item.rarity], top: '-5px', right: '-5px', left: 'auto', zIndex: 2 }}>{item.rarity}</div>}
                     
-                    <div style={{ flex: 1, width: '100%', minHeight: '120px', backgroundColor: '#e2e8f0', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '8px', overflow: 'hidden' }}>
+                    {/* PERBAIKAN: Kotak Frame dengan Manekin di Belakang */}
+                    <div style={{ flex: 1, width: '100%', aspectRatio: '1/1', backgroundColor: '#e2e8f0', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '8px', overflow: 'hidden', position: 'relative' }}>
                         {item ? (
-                            <img src={`${IPFS_BASE}/${folderName}/${encodeURIComponent(item.fileName)}.png`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt={itemName} />
-                        ) : (<span style={{ color: '#94a3b8', fontWeight: 'bold' }}>Preview</span>)}
+                            <>
+                                {/* Layer 1: Manekin (Agak transparan agar baju menonjol) */}
+                                <img src="/manekin.png" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5 }} alt="Mannequin" />
+                                {/* Layer 2: Item Baju/Aksesoris */}
+                                <img src={`${IPFS_BASE}/${folderName}/${encodeURIComponent(item.fileName)}.png`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 10 }} alt={itemName} />
+                            </>
+                        ) : (<span style={{ color: '#94a3b8', fontWeight: 'bold', zIndex: 10 }}>Preview</span>)}
                     </div>
+                    
                     <div style={{ textAlign: 'center', marginTop: 'auto' }}>
                         <span style={{ fontWeight: 'bold', display: 'block', fontSize: '12px' }}>{itemName}</span>
                         <span style={{ fontSize: '10px', marginTop: '4px', color: isEquipped ? 'var(--pale-marigold)' : 'var(--lake-blue)', display: 'block', fontWeight: 'bold' }}>
@@ -147,7 +148,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto', maxHeight: '260px', paddingRight: '2px' }}>
                                 <h4 className="section-title" style={{ margin: '0 0 2px 0', fontSize: '12px' }}>TRAITS</h4>
                                 
-                                {/* TRAITS DINAMIS MENGIKUTI PREVIEW */}
                                 {(() => {
                                     const CUSTOMIZABLE = ['bikini', 'necklace', 'shades', 'bracelet'];
                                     
@@ -171,7 +171,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                             </div>
                         </div>
 
-                        {/* TOMBOL MINT (BURN & REPLACE) */}
                         <button className="btn" onClick={handleMint} style={{ background: '#111', color: '#fff', border: '2px solid #333', padding: '10px', fontSize: '14px', marginBottom: '15px', letterSpacing: '1px' }}>
                             🔥 MINT (BURN & REPLACE)
                         </button>
@@ -189,7 +188,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                 {/* PANEL KANAN: Wardrobe & Popup */}
                 <div className="col-right" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
                     
-                    {/* OVERLAY POPUP EQUIP/STRIP */}
                     {itemPopup && (
                         <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 50, display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '14px' }}>
                             <div style={{ background: 'var(--vanilla-cream)', padding: '20px', borderRadius: '12px', border: '4px solid var(--lake-blue)', textAlign: 'center', width: '80%' }}>
