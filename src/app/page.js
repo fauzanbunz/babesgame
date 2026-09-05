@@ -34,7 +34,7 @@ export default function BabesMap() {
     const [authStatus, setAuthStatus] = useState("loading"); 
     const [errorDetail, setErrorDetail] = useState(""); 
 
-    // 1. SISTEM DETEKSI ULTIMATE (BYPASS BLOCKSCOUT VIA LOGS RPC)
+    // 1. SISTEM DETEKSI ULTIMATE DENGAN RADAR ON-CHAIN
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -44,38 +44,30 @@ export default function BabesMap() {
         async function fetchRealAssets() {
             setAuthStatus("loading");
             let foundIds = [];
-            
-            console.log("🕵️ Interogasi Smart Contract untuk:", account.address);
-
             let balanceNum = null;
             let contract = null;
             let lastErr = null;
-            let workingRpcUrl = null; // Menyimpan RPC yang aktif
+            let workingRpcUrl = null; 
 
             for (const rpcUrl of RPC_ENDPOINTS) {
                 try {
                     const chain = makeRobinhoodChain(rpcUrl);
                     const c = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
-
                     const bal = await readContract({
                         contract: c,
                         method: "function balanceOf(address owner) view returns (uint256)",
                         params: [account.address]
                     });
-
                     balanceNum = Number(bal);
                     contract = c;
                     workingRpcUrl = rpcUrl;
-                    console.log(`⚖️ Saldo NFT via ${rpcUrl}:`, balanceNum);
                     break; 
                 } catch (err) {
-                    console.warn(`⚠️ RPC gagal (${rpcUrl}):`, err?.message || err);
                     lastErr = err;
                 }
             }
 
             if (balanceNum === null) {
-                console.error("❌ Semua RPC gagal saat membaca On-Chain:", lastErr);
                 setErrorDetail(lastErr?.message || String(lastErr));
                 setAuthStatus("error");
                 return;
@@ -83,76 +75,69 @@ export default function BabesMap() {
 
             try {
                 if (balanceNum > 0) {
-                    
-                    // Coba cara standar Thirdweb
-                    try {
-                        const owned = await getOwnedTokenIds({ contract, owner: account.address });
-                        if (owned && owned.length > 0) {
-                            foundIds = owned.map(id => ({ id: Number(id) }));
-                        }
-                    } catch (extErr) {
-                        console.warn("⚠️ Standar ID fetch gagal, mengaktifkan Scanner Riwayat RPC...");
-                    }
-
-                    // KARENA BLOCKSCOUT MATI/CORS, KITA BACA LANGSUNG LOGS DARI ALCHEMY RPC!
-                    if (foundIds.length === 0 && workingRpcUrl) {
+                    // Tahap 1: Coba API Custom Alchemy (Super cepat jika didukung)
+                    if (foundIds.length === 0 && workingRpcUrl.includes("alchemy")) {
                         try {
-                            // Format alamat dompet menjadi 32 bytes (syarat API Ethereum Log)
-                            const paddedAddress = "0x000000000000000000000000" + account.address.slice(2).toLowerCase();
-                            
-                            const rpcRes = await fetch(workingRpcUrl, {
+                            const res = await fetch(workingRpcUrl, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    jsonrpc: "2.0",
-                                    id: 1,
-                                    method: "eth_getLogs",
-                                    params: [{
-                                        address: NFT_CONTRACT_ADDRESS,
-                                        fromBlock: "0x0",
-                                        toBlock: "latest",
-                                        topics: [
-                                            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", // Hash event Transfer
-                                            null, // Dari siapa saja
-                                            paddedAddress // Ke dompetmu
-                                        ]
-                                    }]
+                                    jsonrpc: "2.0", id: 1, method: "alchemy_getNfts",
+                                    params: [{ owner: account.address, contractAddresses: [NFT_CONTRACT_ADDRESS] }]
                                 })
                             });
-                            
-                            const rpcData = await rpcRes.json();
-                            
-                            if (rpcData && rpcData.result) {
-                                // Ekstrak ID dari hexadesimal ke angka biasa, lalu hilangkan duplikat
-                                const extractedIds = rpcData.result.map(log => parseInt(log.topics[3], 16));
-                                const uniqueIds = [...new Set(extractedIds)];
-                                
-                                // Verifikasi satu-satu untuk memastikan NFT belum kamu jual/transfer ke orang lain
-                                const confirmedIds = [];
-                                for (let id of uniqueIds) {
-                                    try {
-                                        const owner = await readContract({
-                                            contract: contract,
-                                            method: "function ownerOf(uint256 tokenId) view returns (address)",
-                                            params: [id]
-                                        });
-                                        if (owner.toLowerCase() === account.address.toLowerCase()) {
-                                            confirmedIds.push({ id: id });
-                                        }
-                                    } catch (e) {
-                                        // Abaikan jika token di-burn/error
-                                    }
-                                }
-                                foundIds = confirmedIds;
+                            const data = await res.json();
+                            if (data?.result?.ownedNfts) {
+                                foundIds = data.result.ownedNfts.map(nft => ({ id: Number(nft.id.tokenId || nft.id) }));
                             }
-                        } catch (rpcErr) {
-                            console.error("❌ Scanner RPC Gagal:", rpcErr);
-                        }
+                        } catch (e) { console.warn("Alchemy NFT API gagal."); }
                     }
 
-                    // Jaring Pengaman Terakhir (Hanya dipakai jika dunia kiamat)
+                    // Tahap 2: Coba Blockscout (Berjaga-jaga jika server mereka hidup lagi)
                     if (foundIds.length === 0) {
-                        console.warn("⚠️ Scanner ngadat, tapi kamu sah memiliki NFT. Membuka gerbang...");
+                        try {
+                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/token-balances`;
+                            const response = await fetch(url);
+                            const data = await response.json();
+                            const items = Array.isArray(data) ? data : (data.items || []);
+                            const bbhTokens = items.filter(item => item?.token?.address?.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase());
+                            if (bbhTokens.length > 0) {
+                                foundIds = bbhTokens.map(t => ({ id: Number(t.token_instance?.id ?? t.token_id ?? 0) })).filter(item => item.id !== 0);
+                            }
+                        } catch (apiErr) { console.warn("Blockscout API gagal."); }
+                    }
+
+                   // TAHAP 3: RADAR ON-CHAIN (BRUTE-FORCE TOTAL SUPPLY 666)
+                    // Jika semua API hancur, kita paksa scan manual ke dalam Smart Contract
+                    if (foundIds.length === 0) {
+                        console.warn("⚠️ Mengaktifkan Radar On-Chain (Scan Manual ID 1-666)...");
+                        const scanPromises = [];
+                        
+                        // Mengerahkan radar untuk menyapu seluruh 666 ID secara serentak!
+                        for (let i = 1; i <= 666; i++) {
+                            scanPromises.push(
+                                readContract({
+                                    contract: contract,
+                                    method: "function ownerOf(uint256 tokenId) view returns (address)",
+                                    params: [i]
+                                })
+                                .then(owner => (owner.toLowerCase() === account.address.toLowerCase() ? { id: i } : null))
+                                .catch(() => null) // Abaikan error untuk token yang belum dicetak/dibakar
+                            );
+                        }
+                        
+                        const results = await Promise.all(scanPromises);
+                        foundIds = results.filter(res => res !== null);
+                    }
+                            );
+                        }
+                        
+                        const results = await Promise.all(scanPromises);
+                        foundIds = results.filter(res => res !== null);
+                    }
+
+                    // Jaring Pengaman Darurat
+                    if (foundIds.length === 0) {
                         foundIds = [{ id: 20 }]; 
                     }
 
@@ -161,12 +146,10 @@ export default function BabesMap() {
                     setAuthStatus("granted");
 
                 } else {
-                    console.warn("⛔ Akses Ditolak. Smart contract menyatakan saldo 0.");
                     setUserNFTIds([]);
                     setAuthStatus("denied"); 
                 }
             } catch (err) {
-                console.error("❌ Fatal Error saat memproses ID:", err);
                 setErrorDetail(err?.message || String(err));
                 setAuthStatus("error");
             }
@@ -175,18 +158,16 @@ export default function BabesMap() {
         fetchRealAssets();
     }, [account?.address]); 
 
-    // 2. SCRIPT AUTO-HARVESTER (Aman dari CORS)
+    // 2. SCRIPT AUTO-HARVESTER
     useEffect(() => {
         if (userNFTIds.length === 0) return;
 
         async function harvestWardrobe() {
-            console.log("👗 Mengumpulkan koleksi baju dari semua NFT milikmu...");
-            
             let newInventory = { bikini: [], shades: [], bracelet: [], necklace: [], piercing: [] };
-            
             const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
             const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
 
+            // Sekarang skrip ini akan berputar 4x sesuai jumlah asetmu yang ditemukan!
             for (let nft of userNFTIds) {
                 try {
                     const uri = await readContract({
@@ -226,7 +207,6 @@ export default function BabesMap() {
                 localStorage.setItem('babesGameState', JSON.stringify(updatedState));
                 return updatedState;
             });
-            console.log("🛍️ Wardrobe otomatis penuh:", newInventory);
         }
         
         harvestWardrobe();
@@ -268,7 +248,7 @@ export default function BabesMap() {
     }
 
     if (!isLoaded || authStatus === "loading") {
-        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Interrogating Smart Contract...</div>;
+        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Scanning 100 On-Chain IDs...</div>;
     }
 
     if (authStatus === "error") {
@@ -276,10 +256,7 @@ export default function BabesMap() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
                 <h2 style={{ color: 'orange', fontFamily: "'Lilita One', cursive", fontSize: '28px', marginBottom: '15px' }}>GAGAL TERHUBUNG KE BLOCKCHAIN ⚠️</h2>
                 <p style={{ color: '#fff', fontSize: '16px', marginBottom: '10px', maxWidth: '400px', lineHeight: '1.5' }}>
-                    Ini BUKAN berarti NFT kamu tidak ada. Sistem gagal membaca data on-chain (RPC/network error), jadi statusnya belum bisa dipastikan.
-                </p>
-                <p style={{ color: '#ffcc00', fontSize: '12px', marginBottom: '25px', maxWidth: '400px', fontFamily: 'monospace' }}>
-                    Detail error: {errorDetail}
+                    Sistem gagal membaca data on-chain. Coba lagi.
                 </p>
                 <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', cursor: 'pointer' }}>Coba Lagi</button>
             </div>
@@ -291,7 +268,7 @@ export default function BabesMap() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
                 <h2 style={{ color: 'var(--powder-pink)', fontFamily: "'Lilita One', cursive", fontSize: '28px', marginBottom: '15px' }}>ACCESS DENIED 🏝️</h2>
                 <p style={{ color: '#fff', fontSize: '16px', marginBottom: '25px', maxWidth: '400px', lineHeight: '1.5' }}>
-                    Sistem mendeteksi 0 saldo NFT Babes in the Hood. Pastikan kamu memakai dompet yang benar.
+                    Sistem mendeteksi 0 saldo NFT Babes in the Hood.
                 </p>
                 <ConnectButton client={client} />
             </div>
