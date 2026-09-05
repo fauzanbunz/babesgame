@@ -65,16 +65,26 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
     return attr ? attr.value : null;
   };
 
+  // PERBAIKAN: kalau value trait tidak terdaftar di itemDB (wajar untuk trait dasar
+  // seperti Background/Skin/Mouth/Hair yang bukan barang di Shop), fallback pakai
+  // value trait itu sendiri sebagai nama file -- asumsi nama file PNG di Pinata
+  // sama persis dengan value trait di metadata NFT.
   const getFileName = (val) => {
     if (!val) return null;
-    return itemDB[val]?.fileName || null;
+    return itemDB[val]?.fileName || val;
   };
 
+  // 4 trait dasar yang TIDAK bisa di-custom -- selalu tampilkan sesuai trait asli NFT.
   const bgFile = getFileName(getTraitValue('Background'));
   const skinFile = getFileName(getTraitValue('Skin'));
   const mouthFile = getFileName(getTraitValue('Mouth'));
   const hairFile = getFileName(getTraitValue('Hair'));
-  
+  // Piercing juga trait tetap (bukan salah satu dari 4 kategori yang bisa di-custom).
+  const piercingFile = getFileName(getTraitValue('Piercing'));
+
+  // Hanya 4 kategori ini yang bisa di-custom/equip lewat Wardrobe: Bikini, Shades,
+  // Necklace, Bracelet. Kalau pemain sudah equip item dari inventory, pakai itu;
+  // kalau belum, tampilkan trait asli NFT-nya.
   const getActiveTraitFile = (category, defaultVal) => {
     const equippedItem = equipped?.[category];
     if (equippedItem && itemDB[equippedItem]) {
@@ -83,7 +93,6 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
     return getFileName(defaultVal);
   };
 
-  const piercingFile = getActiveTraitFile('piercing', getTraitValue('Piercing'));
   const bikiniFile = getActiveTraitFile('bikini', getTraitValue('Bikini'));
   const necklaceFile = getActiveTraitFile('necklace', getTraitValue('Necklace'));
   const shadesFile = getActiveTraitFile('shades', getTraitValue('Shades'));
