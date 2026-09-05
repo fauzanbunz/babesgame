@@ -3,7 +3,6 @@
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
 import { client } from "../client";
 import { useState, useEffect } from "react";
-// PERUBAHAN: Menambahkan getContract dan getOwnedTokenIds dari Thirdweb
 import { readContract, getContract } from "thirdweb";
 import { getOwnedTokenIds } from "thirdweb/extensions/erc721";
 
@@ -11,10 +10,7 @@ import HutModal from "../components/HutModal";
 import ShopModal from "../components/ShopModal";
 import MusicHUD from '../components/MusicHUD';
 
-// PERBAIKAN: chain & RPC sekarang didefinisikan SEKALI di ../chain-config.js
-// dan dipakai bersama oleh page.js maupun CharacterPreview.jsx. Sebelumnya
-// dua file ini punya definisi RPC terpisah -> salah satu ketinggalan diupdate
-// dan tetap pakai API key yang rusak walau file lain sudah diperbaiki.
+// Chain & RPC diimpor dari config terpusat
 import { NFT_CONTRACT_ADDRESS, RPC_ENDPOINTS, makeRobinhoodChain } from "../chain-config";
 
 const defaultState = {
@@ -35,9 +31,9 @@ export default function BabesMap() {
     
     const [userNFTIds, setUserNFTIds] = useState([]);
     const [authStatus, setAuthStatus] = useState("loading"); 
-    const [errorDetail, setErrorDetail] = useState(""); // PERBAIKAN: simpan pesan error asli untuk debugging
+    const [errorDetail, setErrorDetail] = useState(""); 
 
-    // SISTEM DETEKSI SUPER ON-CHAIN
+    // 1. SISTEM DETEKSI SUPER ON-CHAIN (Dengan Fallback RPC milikmu)
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -50,7 +46,6 @@ export default function BabesMap() {
             
             console.log("🕵️ Interogasi Smart Contract untuk:", account.address);
 
-            // PERBAIKAN: coba tiap RPC di RPC_ENDPOINTS satu-satu sampai ada yang berhasil
             let balanceNum = null;
             let contract = null;
             let lastErr = null;
@@ -69,16 +64,14 @@ export default function BabesMap() {
                     balanceNum = Number(bal);
                     contract = c;
                     console.log(`⚖️ Saldo NFT via ${rpcUrl}:`, balanceNum);
-                    break; // berhasil, tidak perlu coba endpoint lain
+                    break; 
                 } catch (err) {
                     console.warn(`⚠️ RPC gagal (${rpcUrl}):`, err?.message || err);
                     lastErr = err;
-                    // lanjut ke endpoint berikutnya di RPC_ENDPOINTS
                 }
             }
 
             if (balanceNum === null) {
-                // Semua RPC di daftar gagal -> baru dianggap error koneksi
                 console.error("❌ Semua RPC gagal saat membaca On-Chain:", lastErr);
                 setErrorDetail(lastErr?.message || String(lastErr));
                 setAuthStatus("error");
@@ -86,10 +79,7 @@ export default function BabesMap() {
             }
 
             try {
-                // JIKA SALDO > 0, KITA DOBRAK PINTUNYA!
                 if (balanceNum > 0) {
-                    
-                    // Coba tarik ID dari On-Chain
                     try {
                         const owned = await getOwnedTokenIds({ contract, owner: account.address });
                         if (owned && owned.length > 0) {
@@ -99,25 +89,21 @@ export default function BabesMap() {
                         console.warn("⚠️ On-chain ID fetch gagal, mencoba API...", extErr);
                     }
 
-                    // Jika gagal, coba API Blockscout
                     if (foundIds.length === 0) {
                         try {
-                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/token-balances`;
+                            // PERBAIKAN: Menggunakan endpoint /nft yang lebih stabil untuk membaca koleksi
+                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/nft`;
                             const response = await fetch(url);
                             const data = await response.json();
                             
-                            const items = Array.isArray(data) ? data : (data.items || []);
-                            // PERBAIKAN: pakai optional chaining -- sebelumnya crash
-                            // (TypeError: Cannot read properties of undefined) kalau
-                            // item.token atau item.token.address tidak ada di response,
-                            // sehingga fallback ini SELALU gagal diam-diam untuk semua wallet.
+                            const items = data.items || [];
                             const bbhTokens = items.filter(item =>
-                                item?.token?.address?.toLowerCase?.() === NFT_CONTRACT_ADDRESS.toLowerCase()
+                                item?.token?.address?.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase()
                             );
                             
                             if (bbhTokens.length > 0) {
                                 foundIds = bbhTokens.map(t => ({ 
-                                    id: Number(t.token_instance?.id ?? t.token_id ?? 0) 
+                                    id: Number(t.id || t.token_id || 0) 
                                 })).filter(item => item.id !== 0 && !isNaN(item.id));
                             }
                         } catch (apiErr) {
@@ -125,9 +111,6 @@ export default function BabesMap() {
                         }
                     }
 
-                    // JARING PENGAMAN TERAKHIR: 
-                    // Smart Contract bilang kamu punya NFT (balance > 0). 
-                    // Jika mesin pencari ID gagal, kita tetap BUKA pintunya secara paksa!
                     if (foundIds.length === 0) {
                         console.warn("⚠️ Mesin pencari ID ngadat, tapi kamu sah memiliki NFT. Membuka gerbang...");
                         foundIds = [{ id: 20 }]; 
@@ -138,16 +121,11 @@ export default function BabesMap() {
                     setAuthStatus("granted");
 
                 } else {
-                    // Smart Contract mengonfirmasi saldo memang 0
                     console.warn("⛔ Akses Ditolak. Smart contract menyatakan saldo 0.");
                     setUserNFTIds([]);
                     setAuthStatus("denied"); 
                 }
             } catch (err) {
-                // PERBAIKAN: sebelumnya error apapun (termasuk RPC gagal/network error)
-                // langsung dianggap "denied" (dikira saldo 0), padahal belum tentu.
-                // Sekarang dibedakan jadi status "error" supaya kelihatan jelas
-                // bahwa masalahnya di koneksi/RPC, bukan di kepemilikan NFT.
                 console.error("❌ Fatal Error saat membaca On-Chain:", err);
                 setErrorDetail(err?.message || String(err));
                 setAuthStatus("error");
@@ -156,6 +134,64 @@ export default function BabesMap() {
         
         fetchRealAssets();
     }, [account?.address]); 
+
+    // 2. SCRIPT AUTO-HARVESTER (MEMENUHI WARDROBE-MU)
+    useEffect(() => {
+        if (userNFTIds.length === 0) return;
+
+        async function harvestWardrobe() {
+            console.log("👗 Mengumpulkan koleksi baju dari semua NFT milikmu...");
+            
+            let newInventory = { bikini: [], shades: [], bracelet: [], necklace: [], piercing: [] };
+            
+            // Menggunakan RPC pertama yang valid dari config-mu
+            const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
+            const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
+
+            for (let nft of userNFTIds) {
+                try {
+                    const uri = await readContract({
+                        contract: nftContract,
+                        method: "function tokenURI(uint256 tokenId) view returns (string)",
+                        params: [nft.id]
+                    });
+                    
+                    let url = uri;
+                    if (uri.startsWith("ipfs://")) {
+                        url = uri.replace("ipfs://", "https://dweb.link/ipfs/");
+                    } else if (uri.includes("mypinata.cloud")) {
+                        url = uri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://dweb.link/ipfs/");
+                    }
+                    
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    
+                    if (data.attributes) {
+                        data.attributes.forEach(attr => {
+                            const type = attr.trait_type?.toLowerCase();
+                            const val = attr.value;
+                            
+                            // Jika ini kategori pakaian, masukkan ke lemari!
+                            if (newInventory[type] && !newInventory[type].includes(val) && val !== "None") {
+                                newInventory[type].push(val);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error("❌ Gagal panen item untuk NFT #" + nft.id, e);
+                }
+            }
+            
+            setGameState(prev => {
+                const updatedState = { ...prev, inventory: newInventory };
+                localStorage.setItem('babesGameState', JSON.stringify(updatedState));
+                return updatedState;
+            });
+            console.log("🛍️ Wardrobe otomatis penuh:", newInventory);
+        }
+        
+        harvestWardrobe();
+    }, [userNFTIds]); 
 
     useEffect(() => {
         const savedState = JSON.parse(localStorage.getItem('babesGameState'));
@@ -196,8 +232,6 @@ export default function BabesMap() {
         return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Interrogating Smart Contract...</div>;
     }
 
-    // PERBAIKAN: layar khusus kalau yang gagal itu koneksi/RPC-nya,
-    // BUKAN karena saldo NFT memang 0. Ini yang paling penting untuk debugging.
     if (authStatus === "error") {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
@@ -213,7 +247,6 @@ export default function BabesMap() {
         );
     }
 
-    // JIKA BENAR-BENAR KOSONG DI BLOCKCHAIN, MUNCULKAN INI
     if (authStatus === "denied") {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
