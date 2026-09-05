@@ -12,18 +12,25 @@ import HutModal from "../components/HutModal";
 import ShopModal from "../components/ShopModal";
 import MusicHUD from '../components/MusicHUD';
 
-const robinhoodChain = defineChain({
-    id: 4663, 
-    name: "Robinhood Chain",
-    nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 }, 
-    // PERBAIKAN: pakai RPC publik resmi Robinhood Chain (tidak butuh API key).
-    // Sebelumnya pakai endpoint Alchemy dengan API key yang formatnya tidak
-    // lazim untuk Alchemy (biasanya key Alchemy tidak berprefix "alch_"),
-    // sehingga kemungkinan besar key tsb invalid/expired dan bikin semua
-    // readContract() gagal diam-diam -> selalu dianggap "denied".
-    rpc: "https://rpc.mainnet.chain.robinhood.com",
-    blockExplorers: [{ name: "Blockscout", url: "https://robinhoodchain.blockscout.com" }]
-});
+// PERBAIKAN: jangan gantung ke satu RPC saja. Kalau satu endpoint gagal
+// (down, rate-limited, atau diblokir/di-intercept oleh software di sisi client
+// seperti antivirus dengan SSL inspection -> ERR_CERT_COMMON_NAME_INVALID),
+// otomatis coba endpoint berikutnya sebelum benar-benar dianggap gagal.
+// Ganti/isi URL Alchemy-mu sendiri di baris kedua kalau sudah punya API key valid.
+const RPC_ENDPOINTS = [
+    "https://rpc.mainnet.chain.robinhood.com", // RPC publik resmi Robinhood Chain
+    // "https://robinhood-mainnet.g.alchemy.com/v2/<API_KEY_ALCHEMY_KAMU_SENDIRI>",
+];
+
+function makeRobinhoodChain(rpcUrl) {
+    return defineChain({
+        id: 4663,
+        name: "Robinhood Chain",
+        nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+        rpc: rpcUrl,
+        blockExplorers: [{ name: "Blockscout", url: "https://robinhoodchain.blockscout.com" }]
+    });
+}
 
 const NFT_CONTRACT_ADDRESS = "0x9a6268489686a04075d0beea36429f0b5836290b";
 
@@ -60,23 +67,42 @@ export default function BabesMap() {
             
             console.log("🕵️ Interogasi Smart Contract untuk:", account.address);
 
-            const contract = getContract({
-                client: client,
-                chain: robinhoodChain,
-                address: NFT_CONTRACT_ADDRESS,
-            });
+            // PERBAIKAN: coba tiap RPC di RPC_ENDPOINTS satu-satu sampai ada yang berhasil
+            let balanceNum = null;
+            let contract = null;
+            let lastErr = null;
+
+            for (const rpcUrl of RPC_ENDPOINTS) {
+                try {
+                    const chain = makeRobinhoodChain(rpcUrl);
+                    const c = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
+
+                    const bal = await readContract({
+                        contract: c,
+                        method: "function balanceOf(address owner) view returns (uint256)",
+                        params: [account.address]
+                    });
+
+                    balanceNum = Number(bal);
+                    contract = c;
+                    console.log(`⚖️ Saldo NFT via ${rpcUrl}:`, balanceNum);
+                    break; // berhasil, tidak perlu coba endpoint lain
+                } catch (err) {
+                    console.warn(`⚠️ RPC gagal (${rpcUrl}):`, err?.message || err);
+                    lastErr = err;
+                    // lanjut ke endpoint berikutnya di RPC_ENDPOINTS
+                }
+            }
+
+            if (balanceNum === null) {
+                // Semua RPC di daftar gagal -> baru dianggap error koneksi
+                console.error("❌ Semua RPC gagal saat membaca On-Chain:", lastErr);
+                setErrorDetail(lastErr?.message || String(lastErr));
+                setAuthStatus("error");
+                return;
+            }
 
             try {
-                // 1. TANYA LANGSUNG KE SMART CONTRACT (Paling Akurat)
-                const bal = await readContract({
-                    contract: contract,
-                    method: "function balanceOf(address owner) view returns (uint256)",
-                    params: [account.address]
-                });
-
-                const balanceNum = Number(bal);
-                console.log("⚖️ Saldo NFT dari Smart Contract:", balanceNum);
-
                 // JIKA SALDO > 0, KITA DOBRAK PINTUNYA!
                 if (balanceNum > 0) {
                     
