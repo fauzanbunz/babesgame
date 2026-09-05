@@ -239,7 +239,12 @@ export default function BabesMap() {
             
             <div id="map-container">
                 <img id="map-frame" src="/frame2.webp" alt="Map Frame" />
-                <MusicHUD />
+                
+                {/* MUSIC HUD: Dipindah ke pojok kiri bawah peta */}
+                <div style={{ position: 'absolute', bottom: '30px', left: '30px', zIndex: 15 }}>
+                    <MusicHUD />
+                </div>
+
                 <img id="map-logo" src="/logo babes.svg" alt="Babes Logo" />
 
                 <div className="hud-profile">
@@ -251,9 +256,9 @@ export default function BabesMap() {
                     </div>
                 </div>
 
-                {/* TOMBOL DAILY QUEST DI HUD UTAMA */}
-                <div style={{ position: 'absolute', top: '30px', right: '30px', zIndex: 10 }}>
-                    <button className="btn btn-gold" onClick={() => setActiveModal('quest')} style={{ padding: '12px 20px', fontSize: '14px', boxShadow: '0 5px 0 #b38b36', letterSpacing: '1px' }}>
+                {/* TOMBOL DAILY QUEST: Dipindah ke tengah atas peta */}
+                <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
+                    <button className="btn btn-gold" onClick={() => setActiveModal('quest')} style={{ padding: '10px 20px', fontSize: '14px', boxShadow: '0 5px 0 #b38b36', letterSpacing: '1px', margin: 0 }}>
                         📜 DAILY QUESTS
                     </button>
                 </div>
@@ -261,27 +266,16 @@ export default function BabesMap() {
                 <img id="map-image" src="/map-babes.webp" alt="Babes Island Map" />
                 <img id="airplane" src="/plane.webp" alt="Flying Plane" />
                 
-               {/* LOKASI BANGUNAN PETA YANG SUDAH DIKALIBRASI */}
-                
-                {/* Toko Baju */}
+                {/* LOKASI BANGUNAN PETA */}
                 <div className="building-label" style={{ left: '48%', top: '57%' }} onClick={() => setActiveModal('shop')}>THE SHOP</div>
-                
-                {/* Menara Penjaga Pantai */}
                 <div className="building-label" style={{ left: '54%', top: '62%' }} onClick={() => setActiveModal('guard')}>GUARD TOWER</div>
-                
-                {/* Bar Payung Jerami */}
                 <div className="building-label" style={{ left: '61%', top: '45%' }} onClick={() => setActiveModal('cafe')}>THE CAFE</div>
-                
-                {/* Gedung Bulat Neon */}
                 <div className="building-label" style={{ left: '72%', top: '25%' }} onClick={() => setActiveModal('club')}>BABES CLUB</div>
-
-                {/* Rumah Utama Tiki */}
                 <div className="building-label" style={{ left: '80%', top: '33%' }} onClick={() => setActiveModal('hut')}>THE HUT</div>
             </div>
 
             {activeModal && <div id="modal-overlay" style={{ display: 'block', opacity: 1 }} onClick={() => setActiveModal(null)}></div>}
             
-            {/* RENDER SEMUA MODAL */}
             {activeModal === 'hut' && <HutModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} userNFTs={userNFTIds} selectedTokenIndex={selectedTokenIndex} setSelectedTokenIndex={setSelectedTokenIndex} onClose={() => setActiveModal(null)} />}
             {activeModal === 'shop' && <ShopModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
             {activeModal === 'cafe' && <CafeModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
