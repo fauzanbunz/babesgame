@@ -2,20 +2,35 @@ import { useState, useEffect } from 'react';
 import { itemDB, rarityColors } from '../data/items';
 
 export default function CafeModal({ gameState, updateGameState, showToast, onClose }) {
-    const [subTab, setSubTab] = useState('chat');
+    const [mainTab, setMainTab] = useState('trade'); // Default to Trade Room for testing
+    const [tradeTab, setTradeTab] = useState('market'); // 'market' or 'create'
+    
     const [chatInput, setChatInput] = useState('');
     const [chatHistory, setChatHistory] = useState([
-        { user: '[Babes #099] Alice', text: 'Welcome to the Cafe!' }
+        { user: '[Babes #099] Alice', text: 'Anyone trading a Pirate Booty bikini?' },
+        { user: '[Babes #420] Bob', text: 'Check the Public Market, I just listed one!' }
     ]);
-    const [isInventoryOpen, setIsInventoryOpen] = useState(false);
-    const [selectedTradeItem, setSelectedTradeItem] = useState(null);
 
-    // Otomatis selesaikan quest "Visit Cafe" saat komponen ini dibuka
+    // Trade Creation State
+    const [myOffer, setMyOffer] = useState(null);
+    const [targetWant, setTargetWant] = useState(null);
+    const [isSelectingFor, setIsSelectingFor] = useState(null); // 'offer' or 'want'
+
+    // Public Market Data (Mock Database)
+    const [marketTrades, setMarketTrades] = useState([
+        { id: 101, user: 'Babes #099', offer: 'Neon Bikini', want: 'Multichain Golden', isMine: false },
+        { id: 102, user: 'Babes #555', offer: 'Naked Black', want: 'Pirate Booty', isMine: false },
+        { id: 103, user: 'Babes #777', offer: 'Retro Blue', want: 'Neon Bikini', isMine: false }
+    ]);
+
+    const IPFS_BASE = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
+    const folderMap = { bikini: '04_Bikini', shades: '07_Shades', bracelet: '09_Bracelet', necklace: '05_Necklace', piercing: '03_Piercing' };
+
     useEffect(() => {
         if (!gameState.quests.visitedCafe) {
             updateGameState('player', { xp: gameState.player.xp + 10 });
             updateGameState('quests', { visitedCafe: true });
-            showToast('Quest Done: Visit The Cafe! +10 XP');
+            showToast('Quest Verified: Visit The Cafe! (+10 XP)');
         }
     }, []);
 
@@ -27,27 +42,120 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         if (!gameState.quests.chatted) {
             updateGameState('player', { xp: gameState.player.xp + 20 });
             updateGameState('quests', { chatted: true });
-            showToast('Quest Done: Talk to Babes! +20 XP');
+            showToast('Quest Verified: Talk to Babes! (+20 XP)');
         }
     };
 
-    const renderTradeInventory = () => {
-        let hasItems = false;
-        const items = [];
-        ['clothes', 'accessories', 'glasses'].forEach(cat => {
-            gameState.inventory[cat].forEach(itemName => {
-                hasItems = true;
-                const item = itemDB[itemName];
-                const color = rarityColors[item.rarity];
-                items.push(
-                    <div key={itemName} className="item-square" onClick={() => { setSelectedTradeItem(itemName); setIsInventoryOpen(false); showToast(`Item selected: ${itemName}`); }} style={{ borderColor: color, cursor: 'pointer', padding: '15px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 800 }}>{itemName}</span>
-                        <span style={{ fontSize: '9px', color: color, marginTop: '5px' }}>{item.rarity}</span>
-                    </div>
-                );
-            });
+    // FILTER INVENTORY: Only show items NOT currently equipped
+    const getAvailableInventory = () => {
+        const available = [];
+        ['bikini', 'shades', 'bracelet', 'necklace', 'piercing'].forEach(cat => {
+            if (gameState.inventory[cat]) {
+                gameState.inventory[cat].forEach(item => {
+                    if (gameState.equipped[cat] !== item) {
+                        available.push({ name: item, category: cat });
+                    }
+                });
+            }
         });
-        return hasItems ? items : <p style={{ gridColumn: 'span 2', textAlign: 'center', fontSize: '12px' }}>Your inventory is empty.</p>;
+        return available;
+    };
+
+    // FILTER MISSING ITEMS: Only show items the player DOES NOT own
+    const getMissingItems = () => {
+        const missing = [];
+        Object.keys(itemDB).forEach(itemName => {
+            const cat = itemDB[itemName].category;
+            if (!gameState.inventory[cat]?.includes(itemName)) {
+                missing.push({ name: itemName, category: cat });
+            }
+        });
+        return missing;
+    };
+
+    const handleListTrade = () => {
+        if (!myOffer || !targetWant) {
+            showToast("Please select both your offer and what you want!");
+            return;
+        }
+        
+        const newTrade = {
+            id: Date.now(),
+            user: gameState.player.name,
+            offer: myOffer.name,
+            want: targetWant.name,
+            isMine: true
+        };
+
+        setMarketTrades([newTrade, ...marketTrades]);
+        setMyOffer(null);
+        setTargetWant(null);
+        setTradeTab('market');
+        showToast("Trade successfully listed on the Public Market!");
+    };
+
+    const handleAcceptTrade = (tradeId, requiredItemName, offeredItemName) => {
+        const requiredItem = itemDB[requiredItemName];
+        const offeredItem = itemDB[offeredItemName];
+
+        // Check if player owns the requested item
+        const ownsItem = gameState.inventory[requiredItem.category]?.includes(requiredItemName);
+        const isEquipped = gameState.equipped[requiredItem.category] === requiredItemName;
+
+        if (!ownsItem) {
+            showToast(`You don't own ${requiredItemName} to complete this trade!`);
+            return;
+        }
+
+        if (isEquipped) {
+            showToast(`Please unequip ${requiredItemName} in The Hut first!`);
+            return;
+        }
+
+        // Logic to Swap Items (Blockchain integration placeholder)
+        showToast("INITIATING WEB3 SWAP SIGNATURE...");
+        setTimeout(() => {
+            // Remove given item
+            const newGiverCategory = gameState.inventory[requiredItem.category].filter(i => i !== requiredItemName);
+            // Add received item
+            const currentReceiverInventory = gameState.inventory[offeredItem.category] || [];
+            const newReceiverCategory = [...currentReceiverInventory, offeredItemName];
+
+            updateGameState('inventory', { 
+                [requiredItem.category]: newGiverCategory,
+                [offeredItem.category]: newReceiverCategory 
+            });
+
+            // Remove trade from market
+            setMarketTrades(marketTrades.filter(t => t.id !== tradeId));
+            showToast(`Trade successful! Acquired ${offeredItemName}.`);
+        }, 1500);
+    };
+
+    const renderItemCard = (itemName, label, onClickAction) => {
+        if (!itemName) {
+            return (
+                <div className="item-square" onClick={onClickAction} style={{ width: '150px', height: '150px', margin: '0 auto', background: 'rgba(255,255,255,0.5)', borderColor: '#cbd5e1', color: '#94a3b8', display: 'flex', flexDirection: 'column', justifyContent: 'center', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '24px', marginBottom: '10px' }}>+</span>
+                    <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{label}</span>
+                </div>
+            );
+        }
+
+        const item = itemDB[itemName];
+        const color = rarityColors[item.rarity || 'Common'];
+        const folder = folderMap[item.category] || '04_Bikini';
+
+        return (
+            <div className="item-square" onClick={onClickAction} style={{ width: '150px', height: '180px', margin: '0 auto', borderColor: color, display: 'flex', flexDirection: 'column', padding: '10px', cursor: 'pointer', background: 'var(--white)' }}>
+                <div className="rarity-badge" style={{ background: color, zIndex: 2 }}>{item.rarity || 'Common'}</div>
+                <div style={{ flex: 1, width: '100%', backgroundColor: '#e2e8f0', borderRadius: '8px', marginBottom: '10px', overflow: 'hidden', position: 'relative' }}>
+                    <img src="/manekin.png" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5 }} alt="Mannequin" />
+                    <img src={`${IPFS_BASE}/${folder}/${encodeURIComponent(item.fileName)}.png`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 10 }} alt={itemName} />
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 800, textAlign: 'center', color: '#111' }}>{itemName}</span>
+            </div>
+        );
     };
 
     return (
@@ -57,13 +165,14 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                     <h3 className="modal-title">BABES CAFE // SOCIAL HUB</h3>
                     <div className="close-modal" onClick={onClose}>X</div>
                 </div>
+                
                 <div className="modal-body" style={{ flexDirection: 'column' }}>
-                    <div className="tab-container" style={{ maxWidth: '600px', margin: '0 auto 10px auto' }}>
-                        <button className={`tab-btn ${subTab === 'chat' ? 'active' : ''}`} onClick={() => setSubTab('chat')}>GLOBAL CHAT</button>
-                        <button className={`tab-btn ${subTab === 'trade' ? 'active' : ''}`} onClick={() => setSubTab('trade')}>TRADE ROOM</button>
+                    <div className="tab-container" style={{ maxWidth: '600px', margin: '0 auto 15px auto' }}>
+                        <button className={`tab-btn ${mainTab === 'chat' ? 'active' : ''}`} onClick={() => setMainTab('chat')}>GLOBAL CHAT</button>
+                        <button className={`tab-btn ${mainTab === 'trade' ? 'active' : ''}`} onClick={() => setMainTab('trade')}>TRADE ROOM</button>
                     </div>
 
-                    {subTab === 'chat' && (
+                    {mainTab === 'chat' && (
                         <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                             <div className="chat-list" style={{ flex: 1 }}>
                                 {chatHistory.map((chat, idx) => (
@@ -77,41 +186,130 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                         </div>
                     )}
 
-                    {subTab === 'trade' && (
-                        <div className="modal-section" style={{ flex: 1 }}>
-                            <p style={{ textAlign: 'center', fontSize: '14px', marginBottom: '20px' }}>Trade securely with other Babes in the Hood.</p>
-                            <div style={{ display: 'flex', gap: '20px' }}>
-                                <div style={{ flex: 1, background: '#fafafa', border: '2px solid var(--vanilla-cream)', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
-                                    <h4 style={{ color: 'var(--lake-blue)', marginTop: 0 }}>YOUR OFFER</h4>
-                                    <div className="item-square" onClick={() => setIsInventoryOpen(true)} style={{ width: '60%', margin: '0 auto', background: selectedTradeItem ? 'rgba(152, 205, 204, 0.1)' : 'var(--pale-marigold)', color: selectedTradeItem ? 'var(--lake-blue)' : 'var(--white)', borderColor: selectedTradeItem ? rarityColors[itemDB[selectedTradeItem].rarity] : 'var(--pale-marigold)' }}>
-                                        {selectedTradeItem ? (
-                                            <>
-                                                <span style={{ fontSize: '16px' }}>{selectedTradeItem}</span>
-                                                <span style={{ fontSize: '10px', marginTop: '5px', fontWeight: 'normal' }}>(Click to change)</span>
-                                            </>
-                                        ) : <span>Select Item</span>}
+                    {mainTab === 'trade' && (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                            <div className="tab-container" style={{ maxWidth: '400px', margin: '0 auto 15px auto' }}>
+                                <button className={`tab-btn ${tradeTab === 'market' ? 'active' : ''}`} style={{ fontSize: '10px', padding: '8px' }} onClick={() => setTradeTab('market')}>PUBLIC MARKET</button>
+                                <button className={`tab-btn ${tradeTab === 'create' ? 'active' : ''}`} style={{ fontSize: '10px', padding: '8px' }} onClick={() => setTradeTab('create')}>CREATE TRADE</button>
+                            </div>
+
+                            {/* --- PUBLIC MARKET VIEW --- */}
+                            {tradeTab === 'market' && (
+                                <div className="modal-section" style={{ flex: 1, overflowY: 'auto' }}>
+                                    <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--lake-blue)', margin: '0 0 15px 0' }}>Browse active trade listings from other players.</p>
+                                    
+                                    {marketTrades.length === 0 ? (
+                                        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>No active trades right now.</div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {marketTrades.map(trade => (
+                                                <div key={trade.id} style={{ background: trade.isMine ? 'rgba(241, 187, 88, 0.1)' : 'var(--white)', border: trade.isMine ? '2px solid var(--pale-marigold)' : '2px solid #e2e8f0', borderRadius: '12px', padding: '15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    
+                                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                        <div style={{ textAlign: 'center' }}>
+                                                            <span style={{ fontSize: '9px', color: '#94a3b8', display: 'block', marginBottom: '5px' }}>OFFERING</span>
+                                                            <span style={{ fontWeight: 'bold', fontSize: '14px', color: 'var(--lake-blue)' }}>{trade.offer}</span>
+                                                        </div>
+                                                        <span style={{ fontSize: '20px', color: 'var(--powder-pink)', fontWeight: 'bold' }}>⇄</span>
+                                                        <div style={{ textAlign: 'center' }}>
+                                                            <span style={{ fontSize: '9px', color: '#94a3b8', display: 'block', marginBottom: '5px' }}>LOOKING FOR</span>
+                                                            <span style={{ fontWeight: 'bold', fontSize: '14px', color: 'var(--lake-blue)' }}>{trade.want}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginLeft: '20px' }}>
+                                                        <span style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '5px' }}>Listed by {trade.user}</span>
+                                                        {trade.isMine ? (
+                                                            <button className="btn" style={{ padding: '8px 15px', fontSize: '10px', background: '#e2e8f0', color: '#94a3b8', margin: 0, cursor: 'default' }}>YOUR LISTING</button>
+                                                        ) : (
+                                                            <button className="btn btn-gold" style={{ padding: '8px 15px', fontSize: '12px', margin: 0 }} onClick={() => handleAcceptTrade(trade.id, trade.want, trade.offer)}>
+                                                                ACCEPT OFFER
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* --- CREATE TRADE VIEW --- */}
+                            {tradeTab === 'create' && (
+                                <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                    <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--lake-blue)', margin: '0 0 20px 0' }}>List an item you own in exchange for an item you want.</p>
+                                    
+                                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div style={{ flex: 1, textAlign: 'center' }}>
+                                            <h4 style={{ color: 'var(--lake-blue)', margin: '0 0 10px 0', fontSize: '14px' }}>YOUR OFFER</h4>
+                                            {renderItemCard(myOffer?.name, 'Select Your Item', () => setIsSelectingFor('offer'))}
+                                        </div>
+                                        
+                                        <div style={{ fontSize: '30px', fontWeight: 'bold', color: 'var(--powder-pink)' }}>⇄</div>
+                                        
+                                        <div style={{ flex: 1, textAlign: 'center' }}>
+                                            <h4 style={{ color: 'var(--lake-blue)', margin: '0 0 10px 0', fontSize: '14px' }}>THEIR OFFER</h4>
+                                            {renderItemCard(targetWant?.name, 'Select Target Item', () => setIsSelectingFor('want'))}
+                                        </div>
+                                    </div>
+                                    
+                                    <div style={{ textAlign: 'center', marginTop: '30px' }}>
+                                        <button className="btn btn-pink" style={{ padding: '12px 30px', fontSize: '14px' }} onClick={handleListTrade}>
+                                            PUBLISH TO MARKET
+                                        </button>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', fontSize: '30px', fontWeight: 'bold', color: 'var(--powder-pink)' }}>⇄</div>
-                                <div style={{ flex: 1, background: '#fafafa', border: '2px solid var(--vanilla-cream)', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
-                                    <h4 style={{ color: 'var(--lake-blue)', marginTop: 0 }}>THEIR OFFER</h4>
-                                    <div className="item-square" style={{ width: '60%', margin: '0 auto', borderColor: 'var(--powder-pink)', color: 'var(--powder-pink)' }}>Target Item</div>
-                                </div>
-                            </div>
-                            <button className="btn btn-gold" style={{ marginTop: '20px' }} onClick={() => showToast('Web3 Trade integration pending.')}>PROPOSE TRADE</button>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* SUB-MODAL INVENTORY TRADE */}
-            {isInventoryOpen && (
-                <div className="sub-modal" style={{ display: 'flex', zIndex: 999 }}>
-                    <h3 style={{ color: 'var(--lake-blue)', fontFamily: "'Press Start 2P', cursive", fontSize: '12px', marginTop: 0, textAlign: 'center' }}>SELECT ITEM</h3>
-                    <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '15px' }}>
-                        {renderTradeInventory()}
+            {/* --- INVENTORY / DATABASE SELECTOR POPUP --- */}
+            {isSelectingFor && (
+                <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div style={{ background: 'var(--vanilla-cream)', padding: '20px', borderRadius: '14px', border: '4px solid var(--lake-blue)', width: '90%', maxWidth: '700px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                            <h3 style={{ color: 'var(--lake-blue)', fontFamily: "'Lilita One', cursive", margin: 0, fontSize: '20px' }}>
+                                {isSelectingFor === 'offer' ? 'SELECT ITEM TO OFFER (UN-EQUIPPED)' : 'SELECT TARGET ITEM (NOT OWNED)'}
+                            </h3>
+                            <button className="btn" style={{ background: '#e2e8f0', color: '#111', margin: 0, padding: '5px 10px' }} onClick={() => setIsSelectingFor(null)}>CLOSE</button>
+                        </div>
+
+                        <div style={{ overflowY: 'auto', flex: 1, padding: '10px' }}>
+                            <div className="item-grid">
+                                {(() => {
+                                    const listToRender = isSelectingFor === 'offer' ? getAvailableInventory() : getMissingItems();
+                                    
+                                    if (listToRender.length === 0) {
+                                        return <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '30px', color: '#94a3b8' }}>No items available in this category.</div>;
+                                    }
+
+                                    return listToRender.map((itemObj, idx) => {
+                                        const item = itemDB[itemObj.name];
+                                        const color = rarityColors[item.rarity || 'Common'];
+                                        const folder = folderMap[item.category] || '04_Bikini';
+                                        
+                                        return (
+                                            <div key={idx} className="item-square" onClick={() => {
+                                                if (isSelectingFor === 'offer') setMyOffer(itemObj);
+                                                else setTargetWant(itemObj);
+                                                setIsSelectingFor(null);
+                                            }} style={{ borderColor: color, cursor: 'pointer', padding: '10px', display: 'flex', flexDirection: 'column' }}>
+                                                <div className="rarity-badge" style={{ background: color, zIndex: 2 }}>{item.rarity || 'Common'}</div>
+                                                <div style={{ flex: 1, width: '100%', aspectRatio: '1/1', backgroundColor: '#e2e8f0', borderRadius: '8px', marginBottom: '8px', position: 'relative', overflow: 'hidden' }}>
+                                                    <img src="/manekin.png" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5 }} alt="Mannequin" />
+                                                    <img src={`${IPFS_BASE}/${folder}/${encodeURIComponent(item.fileName)}.png`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 10 }} alt={itemObj.name} />
+                                                </div>
+                                                <span style={{ fontSize: '11px', fontWeight: 800, textAlign: 'center' }}>{itemObj.name}</span>
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                            </div>
+                        </div>
                     </div>
-                    <button className="btn btn-pink" onClick={() => setIsInventoryOpen(false)}>CANCEL</button>
                 </div>
             )}
         </>
