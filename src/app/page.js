@@ -5,7 +5,6 @@ import { client } from "../client";
 import { useState, useEffect } from "react";
 import { readContract, getContract } from "thirdweb";
 import { getOwnedTokenIds } from "thirdweb/extensions/erc721";
-// TAMBAHAN: Senjata anti-CORS Thirdweb untuk mengisi lemari
 import { resolveScheme } from "thirdweb/storage"; 
 
 import HutModal from "../components/HutModal";
@@ -35,7 +34,7 @@ export default function BabesMap() {
     const [authStatus, setAuthStatus] = useState("loading"); 
     const [errorDetail, setErrorDetail] = useState(""); 
 
-    // 1. SISTEM DETEKSI (Menggunakan API token-balances yang terbukti sukses)
+    // 1. SISTEM DETEKSI ULTIMATE (BYPASS BLOCKSCOUT VIA LOGS RPC)
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -51,6 +50,7 @@ export default function BabesMap() {
             let balanceNum = null;
             let contract = null;
             let lastErr = null;
+            let workingRpcUrl = null; // Menyimpan RPC yang aktif
 
             for (const rpcUrl of RPC_ENDPOINTS) {
                 try {
@@ -65,6 +65,7 @@ export default function BabesMap() {
 
                     balanceNum = Number(bal);
                     contract = c;
+                    workingRpcUrl = rpcUrl;
                     console.log(`⚖️ Saldo NFT via ${rpcUrl}:`, balanceNum);
                     break; 
                 } catch (err) {
@@ -82,39 +83,76 @@ export default function BabesMap() {
 
             try {
                 if (balanceNum > 0) {
+                    
+                    // Coba cara standar Thirdweb
                     try {
                         const owned = await getOwnedTokenIds({ contract, owner: account.address });
                         if (owned && owned.length > 0) {
                             foundIds = owned.map(id => ({ id: Number(id) }));
                         }
                     } catch (extErr) {
-                        console.warn("⚠️ On-chain ID fetch gagal, mencoba API...", extErr);
+                        console.warn("⚠️ Standar ID fetch gagal, mengaktifkan Scanner Riwayat RPC...");
                     }
 
-                    if (foundIds.length === 0) {
+                    // KARENA BLOCKSCOUT MATI/CORS, KITA BACA LANGSUNG LOGS DARI ALCHEMY RPC!
+                    if (foundIds.length === 0 && workingRpcUrl) {
                         try {
-                            // PERBAIKAN: Kembali menggunakan jalur token-balances yang terbukti kebal error
-                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/token-balances`;
-                            const response = await fetch(url);
-                            const data = await response.json();
+                            // Format alamat dompet menjadi 32 bytes (syarat API Ethereum Log)
+                            const paddedAddress = "0x000000000000000000000000" + account.address.slice(2).toLowerCase();
                             
-                            const items = Array.isArray(data) ? data : (data.items || []);
-                            const bbhTokens = items.filter(item =>
-                                item?.token?.address?.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase()
-                            );
+                            const rpcRes = await fetch(workingRpcUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    jsonrpc: "2.0",
+                                    id: 1,
+                                    method: "eth_getLogs",
+                                    params: [{
+                                        address: NFT_CONTRACT_ADDRESS,
+                                        fromBlock: "0x0",
+                                        toBlock: "latest",
+                                        topics: [
+                                            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", // Hash event Transfer
+                                            null, // Dari siapa saja
+                                            paddedAddress // Ke dompetmu
+                                        ]
+                                    }]
+                                })
+                            });
                             
-                            if (bbhTokens.length > 0) {
-                                foundIds = bbhTokens.map(t => ({ 
-                                    id: Number(t.token_instance?.id ?? t.token_id ?? 0) 
-                                })).filter(item => item.id !== 0 && !isNaN(item.id));
+                            const rpcData = await rpcRes.json();
+                            
+                            if (rpcData && rpcData.result) {
+                                // Ekstrak ID dari hexadesimal ke angka biasa, lalu hilangkan duplikat
+                                const extractedIds = rpcData.result.map(log => parseInt(log.topics[3], 16));
+                                const uniqueIds = [...new Set(extractedIds)];
+                                
+                                // Verifikasi satu-satu untuk memastikan NFT belum kamu jual/transfer ke orang lain
+                                const confirmedIds = [];
+                                for (let id of uniqueIds) {
+                                    try {
+                                        const owner = await readContract({
+                                            contract: contract,
+                                            method: "function ownerOf(uint256 tokenId) view returns (address)",
+                                            params: [id]
+                                        });
+                                        if (owner.toLowerCase() === account.address.toLowerCase()) {
+                                            confirmedIds.push({ id: id });
+                                        }
+                                    } catch (e) {
+                                        // Abaikan jika token di-burn/error
+                                    }
+                                }
+                                foundIds = confirmedIds;
                             }
-                        } catch (apiErr) {
-                            console.error("❌ API Blockscout Gagal:", apiErr);
+                        } catch (rpcErr) {
+                            console.error("❌ Scanner RPC Gagal:", rpcErr);
                         }
                     }
 
+                    // Jaring Pengaman Terakhir (Hanya dipakai jika dunia kiamat)
                     if (foundIds.length === 0) {
-                        console.warn("⚠️ Mesin pencari ID ngadat, tapi kamu sah memiliki NFT. Membuka gerbang...");
+                        console.warn("⚠️ Scanner ngadat, tapi kamu sah memiliki NFT. Membuka gerbang...");
                         foundIds = [{ id: 20 }]; 
                     }
 
@@ -128,7 +166,7 @@ export default function BabesMap() {
                     setAuthStatus("denied"); 
                 }
             } catch (err) {
-                console.error("❌ Fatal Error saat membaca On-Chain:", err);
+                console.error("❌ Fatal Error saat memproses ID:", err);
                 setErrorDetail(err?.message || String(err));
                 setAuthStatus("error");
             }
@@ -137,7 +175,7 @@ export default function BabesMap() {
         fetchRealAssets();
     }, [account?.address]); 
 
-    // 2. SCRIPT AUTO-HARVESTER (Dilindungi Jalur VIP Thirdweb)
+    // 2. SCRIPT AUTO-HARVESTER (Aman dari CORS)
     useEffect(() => {
         if (userNFTIds.length === 0) return;
 
@@ -159,7 +197,6 @@ export default function BabesMap() {
                     
                     let resolvedUrl = uri;
                     
-                    // PERBAIKAN: Gunakan resolveScheme agar tidak diblokir CORS oleh gateway publik
                     if (uri.startsWith("ipfs://")) {
                         resolvedUrl = resolveScheme({ client, uri: uri }); 
                     } else if (uri.includes("mypinata.cloud")) {
