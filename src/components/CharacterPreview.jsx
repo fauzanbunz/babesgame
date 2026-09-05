@@ -4,12 +4,16 @@ import { useReadContract } from "thirdweb/react";
 import { client } from "../client";
 import { itemDB } from '../data/items';
 import { NFT_CONTRACT_ADDRESS, robinhoodChain } from "../chain-config";
-import { resolveScheme } from "thirdweb/storage";
+import { resolveScheme } from "thirdweb/storage"; // JALUR VIP THIRDWEB
 
 export default function CharacterPreview({ equipped, activeNFT, onAttributesChange }) {
-  // GATEWAY VIP (PINATA PRIBADI): Tetap dipertahankan KHUSUS untuk me-render gambar trait (PNG) 
+  // GATEWAY GAMBAR: Tetap pakai Pinata pribadimu untuk PNG
   const ipfsBaseUrl = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
+  
   const [nftAttributes, setNftAttributes] = useState([]);
+  
+  // INI DIA YANG HILANG! State untuk menampilkan teks indikator UI
+  const [statusMsg, setStatusMsg] = useState("");
 
   const tokenId = activeNFT ? Number(activeNFT.id) : null;
 
@@ -28,24 +32,22 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
 
   useEffect(() => {
     if (tokenUriError) {
-      console.error("❌ Gagal membaca tokenURI untuk token #" + tokenId + ":", tokenUriError);
+      console.error("❌ Gagal membaca tokenURI:", tokenUriError);
+      setStatusMsg("Gagal membaca Smart Contract.");
     }
-  }, [tokenUriError, tokenId]);
+  }, [tokenUriError]);
 
   useEffect(() => {
     async function fetchMetadata() {
       if (!tokenUri) return;
       try {
-        setStatusMsg("Mengunduh Metadata...");
-        
+        setStatusMsg("Membuka Jalur VIP Thirdweb...");
         let resolvedUrl = tokenUri;
         
         // MENGGUNAKAN JALUR VIP THIRDWEB (KEBAL CORS & 403)
         if (tokenUri.startsWith("ipfs://")) {
-            // resolveScheme akan mengubah "ipfs://" menjadi URL ipfscdn.io milikmu sendiri!
             resolvedUrl = resolveScheme({ client, uri: tokenUri }); 
         } else if (tokenUri.includes("mypinata.cloud")) {
-            // Jaring pengaman jika kontrak menggunakan hardcode Pinata
             resolvedUrl = tokenUri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://ipfs.io/ipfs/");
         }
         
@@ -58,11 +60,11 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
         if (data.attributes) {
           setNftAttributes(data.attributes);
           if (onAttributesChange) onAttributesChange(data.attributes);
-          setStatusMsg(""); // Kosongkan pesan agar gambar muncul
+          setStatusMsg(""); // Kosongkan pesan agar gambar bisa muncul!
         }
       } catch (err) {
         console.error("❌ Gagal memuat metadata NFT:", err);
-        setStatusMsg("Gagal memuat gambar (Ditolak Server).");
+        setStatusMsg("Gagal memuat metadata (Ditolak Server).");
       }
     }
     fetchMetadata();
@@ -104,33 +106,39 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', aspectRatio: '1 / 1', backgroundColor: '#111', overflow: 'hidden', borderRadius: '14px' }}>
         
-        {tokenId === null && (
+        {/* Indikator Status Teks */}
+        {statusMsg && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', textAlign: 'center', padding: '10px', zIndex: 100 }}>
+                {statusMsg}
+            </div>
+        )}
+
+        {tokenId === null && !statusMsg && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', textAlign: 'center', padding: '10px', zIndex: 100 }}>
                 Tidak ada NFT dipilih
             </div>
         )}
-        
-        {tokenId !== null && isTokenUriLoading && (
+
+        {tokenId !== null && isTokenUriLoading && !statusMsg && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', zIndex: 100 }}>
                 Memuat metadata NFT...
             </div>
         )}
-        
-        {tokenId !== null && !isTokenUriLoading && tokenUriError && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', textAlign: 'center', padding: '10px', zIndex: 100 }}>
-                Gagal memuat NFT #{tokenId}
-            </div>
+
+        {/* GAMBAR BARU MUNCUL JIKA TIDAK ADA ERROR MSG */}
+        {!statusMsg && !isTokenUriLoading && (
+            <>
+                {bgFile && <img src={`${ipfsBaseUrl}/01_Background/${encodeURIComponent(bgFile)}.png`} style={layerStyle(0)} alt="Background" />}
+                {skinFile && <img src={`${ipfsBaseUrl}/02_Skin/${encodeURIComponent(skinFile)}.png`} style={layerStyle(10)} alt="Skin" />}
+                {mouthFile && <img src={`${ipfsBaseUrl}/08_Mouth/${encodeURIComponent(mouthFile)}.png`} style={layerStyle(15)} alt="Mouth" />}
+                {piercingFile && <img src={`${ipfsBaseUrl}/03_Piercing/${encodeURIComponent(piercingFile)}.png`} style={layerStyle(20)} alt="Piercing" />}
+                {bikiniFile && <img src={`${ipfsBaseUrl}/04_Bikini/${encodeURIComponent(bikiniFile)}.png`} style={layerStyle(30)} alt="Bikini" />}
+                {necklaceFile && <img src={`${ipfsBaseUrl}/05_Necklace/${encodeURIComponent(necklaceFile)}.png`} style={layerStyle(40)} alt="Necklace" />}
+                {hairFile && <img src={`${ipfsBaseUrl}/06_Hair/${encodeURIComponent(hairFile)}.png`} style={layerStyle(50)} alt="Hair" />}
+                {shadesFile && <img src={`${ipfsBaseUrl}/07_Shades/${encodeURIComponent(shadesFile)}.png`} style={layerStyle(60)} alt="Shades" />}
+                {braceletFile && <img src={`${ipfsBaseUrl}/09_Bracelet/${encodeURIComponent(braceletFile)}.png`} style={layerStyle(70)} alt="Bracelet" />}
+            </>
         )}
-        
-        {bgFile && <img src={`${ipfsBaseUrl}/01_Background/${encodeURIComponent(bgFile)}.png`} style={layerStyle(0)} alt="Background" />}
-        {skinFile && <img src={`${ipfsBaseUrl}/02_Skin/${encodeURIComponent(skinFile)}.png`} style={layerStyle(10)} alt="Skin" />}
-        {mouthFile && <img src={`${ipfsBaseUrl}/08_Mouth/${encodeURIComponent(mouthFile)}.png`} style={layerStyle(15)} alt="Mouth" />}
-        {piercingFile && <img src={`${ipfsBaseUrl}/03_Piercing/${encodeURIComponent(piercingFile)}.png`} style={layerStyle(20)} alt="Piercing" />}
-        {bikiniFile && <img src={`${ipfsBaseUrl}/04_Bikini/${encodeURIComponent(bikiniFile)}.png`} style={layerStyle(30)} alt="Bikini" />}
-        {necklaceFile && <img src={`${ipfsBaseUrl}/05_Necklace/${encodeURIComponent(necklaceFile)}.png`} style={layerStyle(40)} alt="Necklace" />}
-        {hairFile && <img src={`${ipfsBaseUrl}/06_Hair/${encodeURIComponent(hairFile)}.png`} style={layerStyle(50)} alt="Hair" />}
-        {shadesFile && <img src={`${ipfsBaseUrl}/07_Shades/${encodeURIComponent(shadesFile)}.png`} style={layerStyle(60)} alt="Shades" />}
-        {braceletFile && <img src={`${ipfsBaseUrl}/09_Bracelet/${encodeURIComponent(braceletFile)}.png`} style={layerStyle(70)} alt="Bracelet" />}
     </div>
   );
 }
