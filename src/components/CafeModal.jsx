@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { itemDB, rarityColors } from '../data/items';
 
 export default function CafeModal({ gameState, updateGameState, showToast, onClose }) {
-    const [mainTab, setMainTab] = useState('trade'); // Default to Trade Room for testing
-    const [tradeTab, setTradeTab] = useState('market'); // 'market' or 'create'
+    const [mainTab, setMainTab] = useState('trade'); 
+    const [tradeTab, setTradeTab] = useState('market'); 
     
     const [chatInput, setChatInput] = useState('');
     const [chatHistory, setChatHistory] = useState([
@@ -11,17 +11,27 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         { user: '[Babes #420] Bob', text: 'Check the Public Market, I just listed one!' }
     ]);
 
-    // Trade Creation State
     const [myOffer, setMyOffer] = useState(null);
     const [targetWant, setTargetWant] = useState(null);
-    const [isSelectingFor, setIsSelectingFor] = useState(null); // 'offer' or 'want'
+    const [isSelectingFor, setIsSelectingFor] = useState(null); 
 
-    // Public Market Data (Mock Database)
-    const [marketTrades, setMarketTrades] = useState([
-        { id: 101, user: 'Babes #099', offer: 'Neon Bikini', want: 'Multichain Golden', isMine: false },
-        { id: 102, user: 'Babes #555', offer: 'Naked Black', want: 'Pirate Booty', isMine: false },
-        { id: 103, user: 'Babes #777', offer: 'Retro Blue', want: 'Neon Bikini', isMine: false }
-    ]);
+    // PERBAIKAN: Membaca data Market dari Local Storage agar tidak hilang
+    const [marketTrades, setMarketTrades] = useState(() => {
+        const savedTrades = localStorage.getItem('babesMarketTrades');
+        if (savedTrades) {
+            return JSON.parse(savedTrades);
+        }
+        return [
+            { id: 101, user: 'Babes #099', offer: 'Neon Bikini', want: 'Multichain Golden', isMine: false },
+            { id: 102, user: 'Babes #555', offer: 'Naked Black', want: 'Pirate Booty', isMine: false },
+            { id: 103, user: 'Babes #777', offer: 'Retro Blue', want: 'Neon Bikini', isMine: false }
+        ];
+    });
+
+    // PERBAIKAN: Menyimpan secara otomatis ke Local Storage setiap ada perubahan Trade
+    useEffect(() => {
+        localStorage.setItem('babesMarketTrades', JSON.stringify(marketTrades));
+    }, [marketTrades]);
 
     const IPFS_BASE = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
     const folderMap = { bikini: '04_Bikini', shades: '07_Shades', bracelet: '09_Bracelet', necklace: '05_Necklace', piercing: '03_Piercing' };
@@ -46,7 +56,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         }
     };
 
-    // FILTER INVENTORY: Only show items NOT currently equipped
     const getAvailableInventory = () => {
         const available = [];
         ['bikini', 'shades', 'bracelet', 'necklace', 'piercing'].forEach(cat => {
@@ -61,7 +70,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         return available;
     };
 
-    // FILTER MISSING ITEMS: Only show items the player DOES NOT own
     const getMissingItems = () => {
         const missing = [];
         Object.keys(itemDB).forEach(itemName => {
@@ -98,7 +106,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         const requiredItem = itemDB[requiredItemName];
         const offeredItem = itemDB[offeredItemName];
 
-        // Check if player owns the requested item
         const ownsItem = gameState.inventory[requiredItem.category]?.includes(requiredItemName);
         const isEquipped = gameState.equipped[requiredItem.category] === requiredItemName;
 
@@ -112,12 +119,9 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
             return;
         }
 
-        // Logic to Swap Items (Blockchain integration placeholder)
         showToast("INITIATING WEB3 SWAP SIGNATURE...");
         setTimeout(() => {
-            // Remove given item
             const newGiverCategory = gameState.inventory[requiredItem.category].filter(i => i !== requiredItemName);
-            // Add received item
             const currentReceiverInventory = gameState.inventory[offeredItem.category] || [];
             const newReceiverCategory = [...currentReceiverInventory, offeredItemName];
 
@@ -126,7 +130,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                 [offeredItem.category]: newReceiverCategory 
             });
 
-            // Remove trade from market
             setMarketTrades(marketTrades.filter(t => t.id !== tradeId));
             showToast(`Trade successful! Acquired ${offeredItemName}.`);
         }, 1500);
@@ -193,7 +196,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                                 <button className={`tab-btn ${tradeTab === 'create' ? 'active' : ''}`} style={{ fontSize: '10px', padding: '8px' }} onClick={() => setTradeTab('create')}>CREATE TRADE</button>
                             </div>
 
-                            {/* --- PUBLIC MARKET VIEW --- */}
                             {tradeTab === 'market' && (
                                 <div className="modal-section" style={{ flex: 1, overflowY: 'auto' }}>
                                     <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--lake-blue)', margin: '0 0 15px 0' }}>Browse active trade listings from other players.</p>
@@ -234,7 +236,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                                 </div>
                             )}
 
-                            {/* --- CREATE TRADE VIEW --- */}
                             {tradeTab === 'create' && (
                                 <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                     <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--lake-blue)', margin: '0 0 20px 0' }}>List an item you own in exchange for an item you want.</p>
@@ -265,7 +266,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                 </div>
             </div>
 
-            {/* --- INVENTORY / DATABASE SELECTOR POPUP --- */}
             {isSelectingFor && (
                 <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                     <div style={{ background: 'var(--vanilla-cream)', padding: '20px', borderRadius: '14px', border: '4px solid var(--lake-blue)', width: '90%', maxWidth: '700px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
