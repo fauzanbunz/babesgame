@@ -34,7 +34,7 @@ export default function BabesMap() {
     const [authStatus, setAuthStatus] = useState("loading"); 
     const [errorDetail, setErrorDetail] = useState(""); 
 
-    // 1. SISTEM DETEKSI ULTIMATE DENGAN RADAR ON-CHAIN
+    // 1. SISTEM DETEKSI ULTIMATE DENGAN "SMART RADAR 666"
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -44,23 +44,27 @@ export default function BabesMap() {
         async function fetchRealAssets() {
             setAuthStatus("loading");
             let foundIds = [];
+            
+            console.log("🕵️ Interogasi Smart Contract untuk:", account.address);
+
             let balanceNum = null;
             let contract = null;
             let lastErr = null;
-            let workingRpcUrl = null; 
 
             for (const rpcUrl of RPC_ENDPOINTS) {
                 try {
                     const chain = makeRobinhoodChain(rpcUrl);
                     const c = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
+
                     const bal = await readContract({
                         contract: c,
                         method: "function balanceOf(address owner) view returns (uint256)",
                         params: [account.address]
                     });
+
                     balanceNum = Number(bal);
                     contract = c;
-                    workingRpcUrl = rpcUrl;
+                    console.log(`⚖️ Saldo NFT terdeteksi: ${balanceNum}`);
                     break; 
                 } catch (err) {
                     lastErr = err;
@@ -75,65 +79,52 @@ export default function BabesMap() {
 
             try {
                 if (balanceNum > 0) {
-                    // Tahap 1: Coba API Custom Alchemy (Super cepat jika didukung)
-                    if (foundIds.length === 0 && workingRpcUrl.includes("alchemy")) {
-                        try {
-                            const res = await fetch(workingRpcUrl, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    jsonrpc: "2.0", id: 1, method: "alchemy_getNfts",
-                                    params: [{ owner: account.address, contractAddresses: [NFT_CONTRACT_ADDRESS] }]
-                                })
-                            });
-                            const data = await res.json();
-                            if (data?.result?.ownedNfts) {
-                                foundIds = data.result.ownedNfts.map(nft => ({ id: Number(nft.id.tokenId || nft.id) }));
-                            }
-                        } catch (e) { console.warn("Alchemy NFT API gagal."); }
+                    
+                    // Coba API bawaan Thirdweb dulu
+                    try {
+                        const owned = await getOwnedTokenIds({ contract, owner: account.address });
+                        if (owned && owned.length > 0) {
+                            foundIds = owned.map(id => ({ id: Number(id) }));
+                        }
+                    } catch (extErr) {
+                        console.warn("⚠️ API standar gagal, mengaktifkan Smart Radar...");
                     }
 
-                    // Tahap 2: Coba Blockscout (Berjaga-jaga jika server mereka hidup lagi)
+                    // TAHAP PEMUNGKAS: SMART RADAR (Batched & Auto-Stop)
                     if (foundIds.length === 0) {
-                        try {
-                            const url = `https://robinhoodchain.blockscout.com/api/v2/addresses/${account.address}/token-balances`;
-                            const response = await fetch(url);
-                            const data = await response.json();
-                            const items = Array.isArray(data) ? data : (data.items || []);
-                            const bbhTokens = items.filter(item => item?.token?.address?.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase());
-                            if (bbhTokens.length > 0) {
-                                foundIds = bbhTokens.map(t => ({ id: Number(t.token_instance?.id ?? t.token_id ?? 0) })).filter(item => item.id !== 0);
-                            }
-                        } catch (apiErr) { console.warn("Blockscout API gagal."); }
-                    }
+                        console.warn(`📡 Mengaktifkan Smart Radar untuk mencari ${balanceNum} NFT...`);
+                        
+                        const MAX_SUPPLY = 666;
+                        const BATCH_SIZE = 50; // Scan 50 ID sekaligus agar RPC tidak kepanasan
 
-                   // TAHAP 3: RADAR ON-CHAIN (BRUTE-FORCE TOTAL SUPPLY 666)
-                    // Jika semua API hancur, kita paksa scan manual ke dalam Smart Contract
-                    if (foundIds.length === 0) {
-                        console.warn("⚠️ Mengaktifkan Radar On-Chain (Scan Manual ID 1-666)...");
-                        const scanPromises = [];
-                        
-                        // Mengerahkan radar untuk menyapu seluruh 666 ID secara serentak!
-                        for (let i = 1; i <= 666; i++) {
-                            scanPromises.push(
-                                readContract({
-                                    contract: contract,
-                                    method: "function ownerOf(uint256 tokenId) view returns (address)",
-                                    params: [i]
-                                })
-                                .then(owner => (owner.toLowerCase() === account.address.toLowerCase() ? { id: i } : null))
-                                .catch(() => null) // Abaikan error untuk token yang belum dicetak/dibakar
-                            );
+                        for (let i = 1; i <= MAX_SUPPLY; i += BATCH_SIZE) {
+                            const batch = [];
+                            
+                            // Siapkan 50 tembakan
+                            for (let j = i; j < i + BATCH_SIZE && j <= MAX_SUPPLY; j++) {
+                                batch.push(
+                                    readContract({
+                                        contract: contract,
+                                        method: "function ownerOf(uint256 tokenId) view returns (address)",
+                                        params: [j]
+                                    })
+                                    .then(owner => (owner.toLowerCase() === account.address.toLowerCase() ? { id: j } : null))
+                                    .catch(() => null) // Abaikan error untuk token kosong
+                                );
+                            }
+                            
+                            // Tembakkan batch
+                            const results = await Promise.all(batch);
+                            const foundInBatch = results.filter(res => res !== null);
+                            
+                            foundIds.push(...foundInBatch);
+
+                            // AUTO-STOP: Jika sudah menemukan semua NFT sesuai saldo, hentikan radar!
+                            if (foundIds.length === balanceNum) {
+                                console.log("🎯 Semua NFT berhasil ditemukan! Mematikan radar.");
+                                break; 
+                            }
                         }
-                        
-                        const results = await Promise.all(scanPromises);
-                        foundIds = results.filter(res => res !== null);
-                    }
-                            );
-                        }
-                        
-                        const results = await Promise.all(scanPromises);
-                        foundIds = results.filter(res => res !== null);
                     }
 
                     // Jaring Pengaman Darurat
@@ -167,7 +158,6 @@ export default function BabesMap() {
             const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
             const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
 
-            // Sekarang skrip ini akan berputar 4x sesuai jumlah asetmu yang ditemukan!
             for (let nft of userNFTIds) {
                 try {
                     const uri = await readContract({
@@ -248,7 +238,7 @@ export default function BabesMap() {
     }
 
     if (!isLoaded || authStatus === "loading") {
-        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Scanning 100 On-Chain IDs...</div>;
+        return <div style={{ textAlign: 'center', marginTop: '50px', color: '#fff', fontFamily: "'Lilita One', cursive" }}>Mengaktifkan Radar Blockchain...</div>;
     }
 
     if (authStatus === "error") {
