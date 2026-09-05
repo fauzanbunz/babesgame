@@ -1,19 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { getContract } from "thirdweb";
 import { useReadContract } from "thirdweb/react";
-import { defineChain } from "thirdweb/chains";
 import { client } from "../client";
 import { itemDB } from '../data/items';
+// PERBAIKAN: pakai config RPC/chain yang SAMA dengan page.js, bukan definisi
+// sendiri di file ini. Sebelumnya di sini masih pakai API key Alchemy yang
+// rusak/placeholder, jadi tokenURI() selalu gagal diam-diam -> preview NFT
+// dan traits tidak pernah muncul walau login sudah berhasil.
+import { NFT_CONTRACT_ADDRESS, robinhoodChain } from "../chain-config";
 
-const NFT_CONTRACT_ADDRESS = "0x9a6268489686a04075d0beea36429f0b5836290b";
-
-const robinhoodChain = defineChain({
-    id: 4663, 
-    name: "Robinhood Chain",
-    rpc: "https://robinhood-mainnet.g.alchemy.com/v2/alch_EMaIvTiuZyumUrGHfFnFd"
-});
-
-export default function CharacterPreview({ equipped, activeNFT }) {
+export default function CharacterPreview({ equipped, activeNFT, onAttributesChange }) {
   const ipfsBaseUrl = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
   const [nftAttributes, setNftAttributes] = useState([]);
 
@@ -25,12 +21,20 @@ export default function CharacterPreview({ equipped, activeNFT }) {
     address: NFT_CONTRACT_ADDRESS,
   });
 
-  const { data: tokenUri } = useReadContract({
+  const { data: tokenUri, isLoading: isTokenUriLoading, error: tokenUriError } = useReadContract({
     contract,
     method: "function tokenURI(uint256 tokenId) view returns (string)",
     params: [tokenId !== null ? tokenId : 0],
     enabled: tokenId !== null,
   });
+
+  useEffect(() => {
+    if (tokenUriError) {
+      // PERBAIKAN: sebelumnya error di sini didiamkan begitu saja (silent fail),
+      // sekarang minimal di-log supaya kelihatan di console kalau tokenURI gagal dibaca.
+      console.error("❌ Gagal membaca tokenURI untuk token #" + tokenId + ":", tokenUriError);
+    }
+  }, [tokenUriError, tokenId]);
 
   useEffect(() => {
     async function fetchMetadata() {
@@ -45,6 +49,9 @@ export default function CharacterPreview({ equipped, activeNFT }) {
         const data = await res.json();
         if (data.attributes) {
           setNftAttributes(data.attributes);
+          // PERBAIKAN: kirim juga ke parent (HutModal) supaya bisa ditampilkan
+          // sebagai daftar traits teks di sisi kanan preview.
+          if (onAttributesChange) onAttributesChange(data.attributes);
         }
       } catch (err) {
         console.error("Gagal memuat metadata NFT:", err);
@@ -88,6 +95,23 @@ export default function CharacterPreview({ equipped, activeNFT }) {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', aspectRatio: '1 / 1', backgroundColor: '#111', overflow: 'hidden', borderRadius: '14px' }}>
+        {/* PERBAIKAN: tampilkan status kalau belum ada gambar sama sekali, supaya kotak
+            tidak terlihat "kosong tanpa alasan" saat loading/gagal/tidak ada trait. */}
+        {tokenId === null && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px', textAlign: 'center', padding: '10px' }}>
+                Tidak ada NFT dipilih
+            </div>
+        )}
+        {tokenId !== null && isTokenUriLoading && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '12px' }}>
+                Memuat metadata NFT...
+            </div>
+        )}
+        {tokenId !== null && !isTokenUriLoading && tokenUriError && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: '11px', textAlign: 'center', padding: '10px' }}>
+                Gagal memuat NFT #{tokenId}
+            </div>
+        )}
         {bgFile && <img src={`${ipfsBaseUrl}/01_Background/${encodeURIComponent(bgFile)}.png`} style={layerStyle(0)} alt="Background" />}
         {skinFile && <img src={`${ipfsBaseUrl}/02_Skin/${encodeURIComponent(skinFile)}.png`} style={layerStyle(10)} alt="Skin" />}
         {mouthFile && <img src={`${ipfsBaseUrl}/08_Mouth/${encodeURIComponent(mouthFile)}.png`} style={layerStyle(15)} alt="Mouth" />}
