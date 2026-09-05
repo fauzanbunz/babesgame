@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { itemDB, rarityColors } from '../data/items';
 import { createClient } from '@supabase/supabase-js';
 
@@ -12,11 +12,14 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
     const [tradeTab, setTradeTab] = useState('market'); 
     
     const [chatInput, setChatInput] = useState('');
-    const [chatHistory, setChatHistory] = useState([]); // Now starts empty, will fetch from DB
+    const [chatHistory, setChatHistory] = useState([]); 
 
     const [myOffer, setMyOffer] = useState(null);
     const [targetWant, setTargetWant] = useState(null);
     const [isSelectingFor, setIsSelectingFor] = useState(null); 
+
+    // REFERENSI UNTUK AUTO-SCROLL
+    const chatEndRef = useRef(null);
 
     const [marketTrades, setMarketTrades] = useState(() => {
         const savedTrades = localStorage.getItem('babesMarketTrades');
@@ -43,6 +46,11 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         }
     }, []);
 
+    // AUTO-SCROLL EFFECT
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatHistory]);
+
     // SUPABASE: FETCH INITIAL CHAT & SUBSCRIBE TO LIVE UPDATES
     useEffect(() => {
         const fetchInitialMessages = async () => {
@@ -60,7 +68,6 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
 
         fetchInitialMessages();
 
-        // Listen for new messages in real-time
         const channel = supabase
             .channel('public:global_chat')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'global_chat' }, (payload) => {
@@ -69,7 +76,7 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel); // Cleanup when modal closes
+            supabase.removeChannel(channel); 
         };
     }, []);
 
@@ -78,7 +85,7 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
         if (chatInput.trim() === '') return;
         
         const msgToSend = chatInput;
-        setChatInput(''); // Clear input instantly for better UX
+        setChatInput(''); 
         
         const userNameFormat = `[${gameState.player.name}]`;
 
@@ -219,8 +226,8 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                     </div>
 
                     {mainTab === 'chat' && (
-                        <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                            <div className="chat-list" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                        <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            <div className="chat-list" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingRight: '10px' }}>
                                 {chatHistory.length === 0 ? (
                                     <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '20px' }}>Loading chat history...</div>
                                 ) : (
@@ -230,6 +237,8 @@ export default function CafeModal({ gameState, updateGameState, showToast, onClo
                                         </div>
                                     ))
                                 )}
+                                {/* Elemen pancingan agar scroll selalu mengarah ke sini */}
+                                <div ref={chatEndRef} />
                             </div>
                             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                                 <input 
