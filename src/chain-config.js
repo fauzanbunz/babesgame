@@ -12,8 +12,8 @@ export const NFT_CONTRACT_ADDRESS = "0x9a6268489686a04075d0beea36429f0b5836290b"
 // Isi API key Alchemy ASLI kamu di baris pertama (uncomment), RPC publik
 // jadi fallback kalau Alchemy sedang bermasalah.
 export const RPC_ENDPOINTS = [
-    // "https://robinhood-mainnet.g.alchemy.com/v2/ISI_API_KEY_ALCHEMY_ASLI_KAMU_DI_SINI",
-    "https://rpc.mainnet.chain.robinhood.com",
+    "https://robinhood-mainnet.g.alchemy.com/v2/alch_EMaIvTiuZyumUrGHfFnFd",
+    "https://rpc.mainnet.chain.robinhood.com", // fallback publik (bisa diblokir oleh ISP tertentu, mis. Telkomsel Internet Baik)
 ];
 
 export function makeRobinhoodChain(rpcUrl) {
