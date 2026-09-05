@@ -1,7 +1,6 @@
 "use client";
 
 import { ConnectButton, useActiveAccount } from "thirdweb/react";
-import { defineChain } from "thirdweb/chains";
 import { client } from "../client";
 import { useState, useEffect } from "react";
 // PERUBAHAN: Menambahkan getContract dan getOwnedTokenIds dari Thirdweb
@@ -12,27 +11,11 @@ import HutModal from "../components/HutModal";
 import ShopModal from "../components/ShopModal";
 import MusicHUD from '../components/MusicHUD';
 
-// PERBAIKAN: jangan gantung ke satu RPC saja. Kalau satu endpoint gagal
-// (down, rate-limited, atau diblokir/di-intercept oleh software di sisi client
-// seperti antivirus dengan SSL inspection -> ERR_CERT_COMMON_NAME_INVALID),
-// otomatis coba endpoint berikutnya sebelum benar-benar dianggap gagal.
-// Ganti/isi URL Alchemy-mu sendiri di baris kedua kalau sudah punya API key valid.
-const RPC_ENDPOINTS = [
-    "https://robinhood-mainnet.g.alchemy.com/v2/alch_EMaIvTiuZyumUrGHfFnFd", // RPC publik resmi Robinhood Chain
-    // "https://robinhood-mainnet.g.alchemy.com/v2/<API_KEY_ALCHEMY_KAMU_SENDIRI>",
-];
-
-function makeRobinhoodChain(rpcUrl) {
-    return defineChain({
-        id: 4663,
-        name: "Robinhood Chain",
-        nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
-        rpc: rpcUrl,
-        blockExplorers: [{ name: "Blockscout", url: "https://robinhoodchain.blockscout.com" }]
-    });
-}
-
-const NFT_CONTRACT_ADDRESS = "0x9a6268489686a04075d0beea36429f0b5836290b";
+// PERBAIKAN: chain & RPC sekarang didefinisikan SEKALI di ../chain-config.js
+// dan dipakai bersama oleh page.js maupun CharacterPreview.jsx. Sebelumnya
+// dua file ini punya definisi RPC terpisah -> salah satu ketinggalan diupdate
+// dan tetap pakai API key yang rusak walau file lain sudah diperbaiki.
+import { NFT_CONTRACT_ADDRESS, RPC_ENDPOINTS, makeRobinhoodChain } from "../chain-config";
 
 const defaultState = {
     player: { name: "Babes #...", level: 1, xp: 0, babes: 1000, eth: 0.5, reputation: "Island Tourist" },
@@ -124,13 +107,17 @@ export default function BabesMap() {
                             const data = await response.json();
                             
                             const items = Array.isArray(data) ? data : (data.items || []);
-                            const bbhTokens = items.filter(item => 
-                                item.token && item.token.address.toLowerCase() === NFT_CONTRACT_ADDRESS.toLowerCase()
+                            // PERBAIKAN: pakai optional chaining -- sebelumnya crash
+                            // (TypeError: Cannot read properties of undefined) kalau
+                            // item.token atau item.token.address tidak ada di response,
+                            // sehingga fallback ini SELALU gagal diam-diam untuk semua wallet.
+                            const bbhTokens = items.filter(item =>
+                                item?.token?.address?.toLowerCase?.() === NFT_CONTRACT_ADDRESS.toLowerCase()
                             );
                             
                             if (bbhTokens.length > 0) {
                                 foundIds = bbhTokens.map(t => ({ 
-                                    id: Number(t.token_instance?.id || t.token_id || 0) 
+                                    id: Number(t.token_instance?.id ?? t.token_id ?? 0) 
                                 })).filter(item => item.id !== 0 && !isNaN(item.id));
                             }
                         } catch (apiErr) {
