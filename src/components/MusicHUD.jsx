@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 export default function MusicHUD() {
-    // Daftar lagu dummy (Silakan ganti dengan URL atau file lokalmu)
+    // Daftar lagu asli dari folder public
     const tracks = [
-        { title: "Sand In My Cup", src: "/music/track1.mp3" },
-        { title: "Island Breeze", src: "/music/track2.mp3" },
-        { title: "Neon Sunset", src: "/music/track3.mp3" }
+        { title: "Sand In My Cup", src: "/Sand In My Cup.mp3" },
+        { title: "Boardwalk Boogie", src: "/Boardwalk Boogie.mp3" },
+        { title: "Salt On Skin", src: "/Salt On Skin.mp3" },
+        { title: "Beach Party Tape", src: "/Beach Party Tape (2).mp3" },
+        { title: "Salt On My Lips", src: "/Salt On My Lips.mp3" }
+
     ];
 
     const [isPlaying, setIsPlaying] = useState(false);
