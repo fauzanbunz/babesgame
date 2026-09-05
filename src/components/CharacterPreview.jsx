@@ -4,6 +4,7 @@ import { useReadContract } from "thirdweb/react";
 import { client } from "../client";
 import { itemDB } from '../data/items';
 import { NFT_CONTRACT_ADDRESS, robinhoodChain } from "../chain-config";
+import { resolveScheme } from "thirdweb/storage";
 
 export default function CharacterPreview({ equipped, activeNFT, onAttributesChange }) {
   // GATEWAY VIP (PINATA PRIBADI): Tetap dipertahankan KHUSUS untuk me-render gambar trait (PNG) 
@@ -35,25 +36,33 @@ export default function CharacterPreview({ equipped, activeNFT, onAttributesChan
     async function fetchMetadata() {
       if (!tokenUri) return;
       try {
-        let url = tokenUri;
+        setStatusMsg("Mengunduh Metadata...");
         
-        // DIPERBAIKI: Membelokkan permintaan JSON ke Gateway Publik (dweb.link) agar tidak kena 403 Pinata
+        let resolvedUrl = tokenUri;
+        
+        // MENGGUNAKAN JALUR VIP THIRDWEB (KEBAL CORS & 403)
         if (tokenUri.startsWith("ipfs://")) {
-          url = tokenUri.replace("ipfs://", "https://dweb.link/ipfs/");
+            // resolveScheme akan mengubah "ipfs://" menjadi URL ipfscdn.io milikmu sendiri!
+            resolvedUrl = resolveScheme({ client, uri: tokenUri }); 
+        } else if (tokenUri.includes("mypinata.cloud")) {
+            // Jaring pengaman jika kontrak menggunakan hardcode Pinata
+            resolvedUrl = tokenUri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://ipfs.io/ipfs/");
         }
-        // Jaring pengaman ekstra: jika URL aslinya sudah terlanjur Pinata, paksa belokkan ke Publik
-        url = url.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://dweb.link/ipfs/");
         
-        const res = await fetch(url);
+        console.log("📡 Menarik JSON dari Jalur VIP:", resolvedUrl);
+        
+        const res = await fetch(resolvedUrl);
         if (!res.ok) throw new Error(`HTTP Error! status: ${res.status}`);
 
         const data = await res.json();
         if (data.attributes) {
           setNftAttributes(data.attributes);
           if (onAttributesChange) onAttributesChange(data.attributes);
+          setStatusMsg(""); // Kosongkan pesan agar gambar muncul
         }
       } catch (err) {
         console.error("❌ Gagal memuat metadata NFT:", err);
+        setStatusMsg("Gagal memuat gambar (Ditolak Server).");
       }
     }
     fetchMetadata();
