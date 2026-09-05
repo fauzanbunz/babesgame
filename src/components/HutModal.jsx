@@ -57,7 +57,7 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
     };
 
     const handleMint = () => {
-        showToast("MINT Init... (Membutuhkan Konfirmasi Wallet & Burn NFT)");
+        showToast("MINT Init... (Requires Wallet Confirmation & Burn NFT)");
     };
 
     const getDisplayTrait = (cat, originalVal) => {
@@ -73,7 +73,7 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
         if (itemsList.length === 0) {
             return (
                 <div style={{ padding: '20px', color: 'var(--lake-blue)', textAlign: 'center', fontWeight: 'bold', width: '100%' }}>
-                    Kamu belum memiliki {cat} tambahan.
+                    You don't have any extra {cat} yet.
                 </div>
             );
         }
@@ -90,13 +90,10 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                 <div key={itemName} className="item-square" onClick={() => handleActionClick(itemName, cat)} style={{ borderColor, background: bgStyle, display: 'flex', flexDirection: 'column', padding: '12px', cursor: 'pointer' }}>
                     {item && <div className="rarity-badge" style={{ background: rarityColors[item.rarity], top: '-5px', right: '-5px', left: 'auto', zIndex: 2 }}>{item.rarity}</div>}
                     
-                    {/* PERBAIKAN: Kotak Frame dengan Manekin di Belakang */}
                     <div style={{ flex: 1, width: '100%', aspectRatio: '1/1', backgroundColor: '#e2e8f0', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '8px', overflow: 'hidden', position: 'relative' }}>
                         {item ? (
                             <>
-                                {/* Layer 1: Manekin (Agak transparan agar baju menonjol) */}
                                 <img src="/manekin.png" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5 }} alt="Mannequin" />
-                                {/* Layer 2: Item Baju/Aksesoris */}
                                 <img src={`${IPFS_BASE}/${folderName}/${encodeURIComponent(item.fileName)}.png`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 10 }} alt={itemName} />
                             </>
                         ) : (<span style={{ color: '#94a3b8', fontWeight: 'bold', zIndex: 10 }}>Preview</span>)}
@@ -121,7 +118,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
             </div>
             <div className="modal-body">
                 
-                {/* PANEL KIRI: Player Card */}
                 <div className="col-left" style={{ flex: 0.8, display: 'flex', flexDirection: 'column' }}>
                     <div className="modal-section" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -152,7 +148,7 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                                     const CUSTOMIZABLE = ['bikini', 'necklace', 'shades', 'bracelet'];
                                     
                                     if (nftTraits.length === 0) {
-                                        return <span style={{ fontSize: '11px', color: 'var(--lake-blue)', opacity: 0.7 }}>Memuat traits...</span>;
+                                        return <span style={{ fontSize: '11px', color: 'var(--lake-blue)', opacity: 0.7 }}>Loading traits...</span>;
                                     }
                                     
                                     return CUSTOMIZABLE.map((cat, i) => {
@@ -185,7 +181,6 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                     </div>
                 </div>
 
-                {/* PANEL KANAN: Wardrobe & Popup */}
                 <div className="col-right" style={{ flex: 1.2, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
                     
                     {itemPopup && (
