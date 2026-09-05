@@ -121,15 +121,29 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                             </div>
                             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto', maxHeight: '260px', paddingRight: '2px' }}>
                                 <h4 className="section-title" style={{ margin: '0 0 2px 0', fontSize: '12px' }}>TRAITS</h4>
-                                {nftTraits.length === 0 && (
-                                    <span style={{ fontSize: '11px', color: 'var(--lake-blue)', opacity: 0.7 }}>Memuat traits...</span>
-                                )}
-                                {nftTraits.map((attr, i) => (
-                                    <div key={`${attr.trait_type}-${i}`} style={{ display: 'flex', flexDirection: 'column', background: 'var(--vanilla-cream)', padding: '5px 8px', borderRadius: '6px', border: '2px solid var(--lake-blue)' }}>
-                                        <span style={{ fontSize: '9px', fontWeight: '900', color: 'var(--lake-blue)', opacity: 0.7, textTransform: 'uppercase' }}>{attr.trait_type}</span>
-                                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--lake-blue)' }}>{String(attr.value)}</span>
-                                    </div>
-                                ))}
+                                {/* PERBAIKAN: panel ini hanya menampilkan 4 kategori yang bisa
+                                    di-custom lewat Wardrobe (Bikini, Shades, Necklace, Bracelet),
+                                    bukan semua trait mentah dari metadata NFT (background/skin/
+                                    mouth/hair/piercing tetap tampil di preview kiri, tapi tidak
+                                    perlu muncul di daftar ini karena tidak bisa diganti). */}
+                                {(() => {
+                                    const CUSTOMIZABLE = ['bikini', 'shades', 'necklace', 'bracelet'];
+                                    const customizableTraits = nftTraits.filter(
+                                        attr => CUSTOMIZABLE.includes(attr.trait_type?.toLowerCase())
+                                    );
+                                    if (nftTraits.length === 0) {
+                                        return <span style={{ fontSize: '11px', color: 'var(--lake-blue)', opacity: 0.7 }}>Memuat traits...</span>;
+                                    }
+                                    if (customizableTraits.length === 0) {
+                                        return <span style={{ fontSize: '11px', color: 'var(--lake-blue)', opacity: 0.7 }}>NFT ini tidak punya trait yang bisa di-custom.</span>;
+                                    }
+                                    return customizableTraits.map((attr, i) => (
+                                        <div key={`${attr.trait_type}-${i}`} style={{ display: 'flex', flexDirection: 'column', background: 'var(--vanilla-cream)', padding: '5px 8px', borderRadius: '6px', border: '2px solid var(--lake-blue)' }}>
+                                            <span style={{ fontSize: '9px', fontWeight: '900', color: 'var(--lake-blue)', opacity: 0.7, textTransform: 'uppercase' }}>{attr.trait_type}</span>
+                                            <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--lake-blue)' }}>{String(attr.value)}</span>
+                                        </div>
+                                    ));
+                                })()}
                             </div>
                         </div>
 
