@@ -7,18 +7,27 @@ import { readContract, getContract } from "thirdweb";
 import { getOwnedTokenIds } from "thirdweb/extensions/erc721";
 import { resolveScheme } from "thirdweb/storage"; 
 
+// IMPORT SEMUA MODAL
 import HutModal from "../components/HutModal";
 import ShopModal from "../components/ShopModal";
 import MusicHUD from '../components/MusicHUD';
+import CafeModal from "../components/CafeModal";
+import ClubModal from "../components/ClubModal";
+import GuardModal from "../components/GuardModal";
+import QuestModal from "../components/QuestModal";
 
-// Chain & RPC diimpor dari config terpusat
 import { NFT_CONTRACT_ADDRESS, RPC_ENDPOINTS, makeRobinhoodChain } from "../chain-config";
 
+// Tambahkan state quest X (Twitter)
 const defaultState = {
     player: { name: "Babes #...", level: 1, xp: 0, babes: 1000, eth: 0.5, reputation: "Island Tourist" },
     inventory: { bikini: [], shades: [], bracelet: [], necklace: [], piercing: [] },
     equipped: { bikini: null, shades: null, bracelet: null, necklace: null, piercing: null },
-    quests: { dailyClaimed: false, chatted: false, itemBought: false, voted: false, contestJoined: false, outfitChanged: false, visitedCafe: false },
+    quests: { 
+        dailyClaimed: false, chatted: false, itemBought: false, voted: false, 
+        contestJoined: false, outfitChanged: false, visitedCafe: false,
+        xFollow: false, xLike: false, xRetweet: false, xComment: false 
+    },
     stats: { babesEarned: 1000, itemsOwned: 0 }
 };
 
@@ -34,7 +43,6 @@ export default function BabesMap() {
     const [authStatus, setAuthStatus] = useState("loading"); 
     const [errorDetail, setErrorDetail] = useState(""); 
 
-    // 1. SISTEM DETEKSI ULTIMATE DENGAN "SMART RADAR 666"
     useEffect(() => {
         if (!account?.address) {
             setAuthStatus("loading");
@@ -44,9 +52,6 @@ export default function BabesMap() {
         async function fetchRealAssets() {
             setAuthStatus("loading");
             let foundIds = [];
-            
-            console.log("🕵️ Interogasi Smart Contract untuk:", account.address);
-
             let balanceNum = null;
             let contract = null;
             let lastErr = null;
@@ -64,7 +69,6 @@ export default function BabesMap() {
 
                     balanceNum = Number(bal);
                     contract = c;
-                    console.log(`⚖️ Saldo NFT terdeteksi: ${balanceNum}`);
                     break; 
                 } catch (err) {
                     lastErr = err;
@@ -79,60 +83,39 @@ export default function BabesMap() {
 
             try {
                 if (balanceNum > 0) {
-                    
-                    // Coba API bawaan Thirdweb dulu
                     try {
                         const owned = await getOwnedTokenIds({ contract, owner: account.address });
                         if (owned && owned.length > 0) {
                             foundIds = owned.map(id => ({ id: Number(id) }));
                         }
                     } catch (extErr) {
-                        console.warn("⚠️ API standar gagal, mengaktifkan Smart Radar...");
+                        console.warn("API standar gagal, mengaktifkan Smart Radar...");
                     }
 
-                    // TAHAP PEMUNGKAS: SMART RADAR (Batched & Auto-Stop)
                     if (foundIds.length === 0) {
-                        console.warn(`📡 Mengaktifkan Smart Radar untuk mencari ${balanceNum} NFT...`);
-                        
                         const MAX_SUPPLY = 666;
-                        const BATCH_SIZE = 50; // Scan 50 ID sekaligus agar RPC tidak kepanasan
+                        const BATCH_SIZE = 50; 
 
                         for (let i = 1; i <= MAX_SUPPLY; i += BATCH_SIZE) {
                             const batch = [];
-                            
-                            // Siapkan 50 tembakan
                             for (let j = i; j < i + BATCH_SIZE && j <= MAX_SUPPLY; j++) {
                                 batch.push(
                                     readContract({
                                         contract: contract,
                                         method: "function ownerOf(uint256 tokenId) view returns (address)",
                                         params: [j]
-                                    })
-                                    .then(owner => (owner.toLowerCase() === account.address.toLowerCase() ? { id: j } : null))
-                                    .catch(() => null) // Abaikan error untuk token kosong
+                                    }).then(owner => (owner.toLowerCase() === account.address.toLowerCase() ? { id: j } : null)).catch(() => null)
                                 );
                             }
-                            
-                            // Tembakkan batch
                             const results = await Promise.all(batch);
-                            const foundInBatch = results.filter(res => res !== null);
-                            
-                            foundIds.push(...foundInBatch);
+                            foundIds.push(...results.filter(res => res !== null));
 
-                            // AUTO-STOP: Jika sudah menemukan semua NFT sesuai saldo, hentikan radar!
-                            if (foundIds.length === balanceNum) {
-                                console.log("🎯 Semua NFT berhasil ditemukan! Mematikan radar.");
-                                break; 
-                            }
+                            if (foundIds.length === balanceNum) break; 
                         }
                     }
 
-                    // Jaring Pengaman Darurat
-                    if (foundIds.length === 0) {
-                        foundIds = [{ id: 20 }]; 
-                    }
+                    if (foundIds.length === 0) foundIds = [{ id: 20 }]; 
 
-                    console.log("✅ Akses Diberikan. ID Terdaftar:", foundIds);
                     setUserNFTIds(foundIds);
                     setAuthStatus("granted");
 
@@ -149,7 +132,6 @@ export default function BabesMap() {
         fetchRealAssets();
     }, [account?.address]); 
 
-    // 2. SCRIPT AUTO-HARVESTER
     useEffect(() => {
         if (userNFTIds.length === 0) return;
 
@@ -161,18 +143,12 @@ export default function BabesMap() {
             for (let nft of userNFTIds) {
                 try {
                     const uri = await readContract({
-                        contract: nftContract,
-                        method: "function tokenURI(uint256 tokenId) view returns (string)",
-                        params: [nft.id]
+                        contract: nftContract, method: "function tokenURI(uint256 tokenId) view returns (string)", params: [nft.id]
                     });
                     
                     let resolvedUrl = uri;
-                    
-                    if (uri.startsWith("ipfs://")) {
-                        resolvedUrl = resolveScheme({ client, uri: uri }); 
-                    } else if (uri.includes("mypinata.cloud")) {
-                        resolvedUrl = uri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://ipfs.io/ipfs/");
-                    }
+                    if (uri.startsWith("ipfs://")) resolvedUrl = resolveScheme({ client, uri: uri }); 
+                    else if (uri.includes("mypinata.cloud")) resolvedUrl = uri.replace("https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/", "https://ipfs.io/ipfs/");
                     
                     const res = await fetch(resolvedUrl);
                     const data = await res.json();
@@ -181,14 +157,13 @@ export default function BabesMap() {
                         data.attributes.forEach(attr => {
                             const type = attr.trait_type?.toLowerCase();
                             const val = attr.value;
-                            
                             if (newInventory[type] && !newInventory[type].includes(val) && val !== "None") {
                                 newInventory[type].push(val);
                             }
                         });
                     }
                 } catch (e) {
-                    console.error("❌ Gagal panen item untuk NFT #" + nft.id, e);
+                    console.error("Gagal panen item", e);
                 }
             }
             
@@ -198,15 +173,12 @@ export default function BabesMap() {
                 return updatedState;
             });
         }
-        
         harvestWardrobe();
     }, [userNFTIds]); 
 
     useEffect(() => {
         const savedState = JSON.parse(localStorage.getItem('babesGameState'));
-        if (savedState) {
-            setGameState({ ...defaultState, ...savedState });
-        }
+        if (savedState) setGameState({ ...defaultState, ...savedState });
         setIsLoaded(true);
     }, []);
 
@@ -245,9 +217,6 @@ export default function BabesMap() {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
                 <h2 style={{ color: 'orange', fontFamily: "'Lilita One', cursive", fontSize: '28px', marginBottom: '15px' }}>GAGAL TERHUBUNG KE BLOCKCHAIN ⚠️</h2>
-                <p style={{ color: '#fff', fontSize: '16px', marginBottom: '10px', maxWidth: '400px', lineHeight: '1.5' }}>
-                    Sistem gagal membaca data on-chain. Coba lagi.
-                </p>
                 <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', cursor: 'pointer' }}>Coba Lagi</button>
             </div>
         );
@@ -257,9 +226,6 @@ export default function BabesMap() {
         return (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--lake-blue)', padding: '20px', textAlign: 'center' }}>
                 <h2 style={{ color: 'var(--powder-pink)', fontFamily: "'Lilita One', cursive", fontSize: '28px', marginBottom: '15px' }}>ACCESS DENIED 🏝️</h2>
-                <p style={{ color: '#fff', fontSize: '16px', marginBottom: '25px', maxWidth: '400px', lineHeight: '1.5' }}>
-                    Sistem mendeteksi 0 saldo NFT Babes in the Hood.
-                </p>
                 <ConnectButton client={client} />
             </div>
         );
@@ -285,17 +251,33 @@ export default function BabesMap() {
                     </div>
                 </div>
 
+                {/* TOMBOL DAILY QUEST DI HUD UTAMA */}
+                <div style={{ position: 'absolute', top: '30px', right: '30px', zIndex: 10 }}>
+                    <button className="btn btn-gold" onClick={() => setActiveModal('quest')} style={{ padding: '12px 20px', fontSize: '14px', boxShadow: '0 5px 0 #b38b36', letterSpacing: '1px' }}>
+                        📜 DAILY QUESTS
+                    </button>
+                </div>
+
                 <img id="map-image" src="/map-babes.webp" alt="Babes Island Map" />
                 <img id="airplane" src="/plane.webp" alt="Flying Plane" />
                 
+                {/* LOKASI BANGUNAN PETA */}
                 <div className="building-label" style={{ left: '46%', top: '59%' }} onClick={() => setActiveModal('shop')}>THE SHOP</div>
                 <div className="building-label" style={{ left: '84%', top: '35%' }} onClick={() => setActiveModal('hut')}>THE HUT</div>
+                <div className="building-label" style={{ left: '60%', top: '30%' }} onClick={() => setActiveModal('club')}>THE CLUB</div>
+                <div className="building-label" style={{ left: '20%', top: '65%' }} onClick={() => setActiveModal('cafe')}>THE CAFE</div>
+                <div className="building-label" style={{ left: '15%', top: '25%' }} onClick={() => setActiveModal('guard')}>GUARD TOWER</div>
             </div>
 
             {activeModal && <div id="modal-overlay" style={{ display: 'block', opacity: 1 }} onClick={() => setActiveModal(null)}></div>}
             
+            {/* RENDER SEMUA MODAL */}
             {activeModal === 'hut' && <HutModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} userNFTs={userNFTIds} selectedTokenIndex={selectedTokenIndex} setSelectedTokenIndex={setSelectedTokenIndex} onClose={() => setActiveModal(null)} />}
             {activeModal === 'shop' && <ShopModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
+            {activeModal === 'cafe' && <CafeModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
+            {activeModal === 'club' && <ClubModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
+            {activeModal === 'guard' && <GuardModal showToast={showToast} onClose={() => setActiveModal(null)} />}
+            {activeModal === 'quest' && <QuestModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
         </>
     );
 }
