@@ -6,12 +6,22 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
     const [mainTab, setMainTab] = useState('wardrobe');
     const [subTab, setSubTab] = useState('bikini');
     const [nameInput, setNameInput] = useState('');
+    // PERBAIKAN: state untuk menampung traits NFT yang di-fetch oleh CharacterPreview,
+    // supaya bisa ditampilkan sebagai daftar teks di sisi kanan preview.
+    const [nftTraits, setNftTraits] = useState([]);
 
     const IPFS_BASE = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
 
     // Ambil object NFT yang sedang aktif
     const activeNFT = userNFTs[selectedTokenIndex];
     const activeTokenId = activeNFT ? Number(activeNFT.id) : 0;
+
+    // Reset traits saat ganti NFT yang dipilih, supaya tidak nampilin trait NFT lama
+    // sesaat sebelum data yang baru selesai di-fetch.
+    const handleSelectToken = (index) => {
+        setNftTraits([]);
+        setSelectedTokenIndex(index);
+    };
 
     const handleSaveName = () => {
         if (nameInput.trim() !== "") {
@@ -95,7 +105,7 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                             <span style={{ fontSize: '12px', fontWeight: '900', color: 'var(--lake-blue)' }}>SELECT NFT:</span>
                             <select 
                                 value={selectedTokenIndex} 
-                                onChange={(e) => setSelectedTokenIndex(Number(e.target.value))}
+                                onChange={(e) => handleSelectToken(Number(e.target.value))}
                                 style={{ padding: '6px 12px', borderRadius: '8px', border: '2px solid var(--lake-blue)', fontWeight: 'bold', background: 'var(--white)', cursor: 'pointer', color: 'var(--lake-blue)', fontSize: '13px', outline: 'none' }}
                             >
                                 {userNFTs.map((nft, index) => (
@@ -104,9 +114,23 @@ export default function HutModal({ gameState, updateGameState, showToast, userNF
                             </select>
                         </div>
 
-                        {/* OPER METADATA NFT ASLI KE PREVIEW */}
-                        <div className="nft-large" style={{ padding: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', aspectRatio: '1/1' }}>
-                            <CharacterPreview equipped={gameState.equipped} activeNFT={activeNFT} />
+                        {/* OPER METADATA NFT ASLI KE PREVIEW + TAMPILKAN TRAITS DI SAMPINGNYA */}
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                            <div className="nft-large" style={{ padding: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', flex: '0 0 55%', aspectRatio: '1/1' }}>
+                                <CharacterPreview equipped={gameState.equipped} activeNFT={activeNFT} onAttributesChange={setNftTraits} />
+                            </div>
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '5px', overflowY: 'auto', maxHeight: '260px', paddingRight: '2px' }}>
+                                <h4 className="section-title" style={{ margin: '0 0 2px 0', fontSize: '12px' }}>TRAITS</h4>
+                                {nftTraits.length === 0 && (
+                                    <span style={{ fontSize: '11px', color: 'var(--lake-blue)', opacity: 0.7 }}>Memuat traits...</span>
+                                )}
+                                {nftTraits.map((attr, i) => (
+                                    <div key={`${attr.trait_type}-${i}`} style={{ display: 'flex', flexDirection: 'column', background: 'var(--vanilla-cream)', padding: '5px 8px', borderRadius: '6px', border: '2px solid var(--lake-blue)' }}>
+                                        <span style={{ fontSize: '9px', fontWeight: '900', color: 'var(--lake-blue)', opacity: 0.7, textTransform: 'uppercase' }}>{attr.trait_type}</span>
+                                        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--lake-blue)' }}>{String(attr.value)}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
                         <div style={{ display: 'flex', gap: '5px', marginBottom: '10px', marginTop: '12px' }}>
