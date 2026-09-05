@@ -18,7 +18,7 @@ import MusicHUD from '../components/MusicHUD';
 // otomatis coba endpoint berikutnya sebelum benar-benar dianggap gagal.
 // Ganti/isi URL Alchemy-mu sendiri di baris kedua kalau sudah punya API key valid.
 const RPC_ENDPOINTS = [
-    "https://rpc.mainnet.chain.robinhood.com", // RPC publik resmi Robinhood Chain
+    "https://robinhood-mainnet.g.alchemy.com/v2/alch_EMaIvTiuZyumUrGHfFnFd", // RPC publik resmi Robinhood Chain
     // "https://robinhood-mainnet.g.alchemy.com/v2/<API_KEY_ALCHEMY_KAMU_SENDIRI>",
 ];
 
