@@ -241,7 +241,7 @@ export default function BabesMap() {
                 <img id="map-frame" src="/frame2.webp" alt="Map Frame" />
                 
                 {/* MUSIC HUD: Dipindah ke pojok kiri bawah peta */}
-                <div style={{ position: 'absolute', bottom: '30px', left: '30px', zIndex: 15 }}>
+                <div style={{ position: 'absolute', bottom: '30px', left: '30px', zIndex: 50 }}>
                     <MusicHUD />
                 </div>
 
