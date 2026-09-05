@@ -2,41 +2,41 @@ import { useState } from 'react';
 import { itemDB, rarityColors } from '../data/items';
 
 export default function ShopModal({ gameState, updateGameState, showToast, onClose }) {
-    const [subTab, setSubTab] = useState('clothes');
+    // Sesuaikan default tab dengan kategori yang ada di itemDB
+    const [subTab, setSubTab] = useState('bikini');
     
-    // Link utama Pinata Anda
-    const IPFS_BASE = "https://gateway.pinata.cloud/ipfs/bafybeieksckbp7kmwgedsjvlgqrqvm57qqwgu3nykch6dkrhi724ysk3qu";
+    // Gunakan URL IPFS VIP yang sama dengan HutModal dan CharacterPreview
+    const IPFS_BASE = "https://scarlet-hilarious-guan-333.mypinata.cloud/ipfs/bafybeigq7bvl53ffdfctjyvhlhxfvig2qw2nffvzji4lanzodk6u62huei";
 
-    const getFileName = (itemName) => {
-        if (itemName === 'Red Bikini') return 'shop_1';
-        if (itemName === 'Neon Bikini') return 'shop_2';
-        if (itemName === 'Baju Shop 1') return 'shop_1';
-        if (itemName === 'Baju Shop 2') return 'shop_2';
-        if (itemName === 'Baju Shop 3') return 'shop_3';
-        if (itemName === 'Baju Shop 4') return 'shop_4';
-        if (itemName === 'Baju Shop 5') return 'shop_5';
-        if (itemName === 'Baju Shop 6') return 'shop_6';
-        if (itemName === 'Baju Shop 7') return 'shop_7';
-        if (itemName === 'Baju Shop 8') return 'shop_8';
-        if (itemName === 'Baju Shop 9') return 'shop_9';
-        if (itemName === 'Baju Shop 10') return 'shop_10';
-        return 'cloth_default';
+    // Peta folder berdasarkan kategori
+    const folderMap = { 
+        bikini: '04_Bikini', 
+        shades: '07_Shades', 
+        bracelet: '09_Bracelet', 
+        necklace: '05_Necklace',
+        piercing: '03_Piercing'
     };
 
     const handleBuyItem = (itemName) => {
         const item = itemDB[itemName];
-        if (gameState.inventory[item.category].includes(itemName)) {
+        
+        // Cek apakah pemain sudah punya item ini di inventory
+        const currentInventory = gameState.inventory[item.category] || [];
+        if (currentInventory.includes(itemName)) {
             showToast(`You already own ${itemName}!`);
             return;
         }
-        if (gameState.player.babes >= item.price) {
-            updateGameState('player', { babes: gameState.player.babes - item.price });
-            const updatedCategory = [...gameState.inventory[item.category], itemName];
+
+        // Cek saldo $babes
+        const price = item.price || 500; // Default 500 jika tidak ada di DB
+        if (gameState.player.babes >= price) {
+            updateGameState('player', { babes: gameState.player.babes - price });
+            const updatedCategory = [...currentInventory, itemName];
             updateGameState('inventory', { [item.category]: updatedCategory });
             updateGameState('stats', { itemsOwned: gameState.stats.itemsOwned + 1 });
             updateGameState('player', { xp: gameState.player.xp + 25 });
             updateGameState('quests', { itemBought: true }); 
-            showToast(`Purchased ${item.rarity} ${itemName}! +25 XP`);
+            showToast(`Purchased ${item.rarity || 'Common'} ${itemName}! +25 XP`);
         } else {
             showToast("Not enough $babes!");
         }
@@ -45,29 +45,53 @@ export default function ShopModal({ gameState, updateGameState, showToast, onClo
     const renderShopItems = (category) => {
         return Object.keys(itemDB).map(itemName => {
             const item = itemDB[itemName];
-            if (item.category === category && item.price > 0) {
-                const color = rarityColors[item.rarity];
+            
+            // Render jika kategori cocok. (Tampilkan semua item, baik yang gratis maupun berbayar)
+            if (item.category === category) {
+                const color = rarityColors[item.rarity || 'Common'] || '#fff';
+                const folderName = folderMap[category] || '04_Bikini';
+                const price = item.price || 500; // Harga dummy jika belum diatur di itemDB
+                
+                // Cek status kepemilikan
+                const isOwned = gameState.inventory[category]?.includes(itemName);
+
                 return (
-                    <div key={itemName} className="item-square" style={{ borderColor: color, display: 'flex', flexDirection: 'column', padding: '15px' }} onClick={() => handleBuyItem(itemName)}>
-                        <div className="rarity-badge" style={{ background: color, zIndex: 2 }}>{item.rarity}</div>
+                    <div 
+                        key={itemName} 
+                        className="item-square" 
+                        style={{ 
+                            borderColor: color, 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            padding: '15px',
+                            cursor: isOwned ? 'default' : 'pointer',
+                            opacity: isOwned ? 0.6 : 1 // Redupkan jika sudah punya
+                        }} 
+                        onClick={() => !isOwned && handleBuyItem(itemName)}
+                    >
+                        <div className="rarity-badge" style={{ background: color, zIndex: 2 }}>
+                            {item.rarity || 'Common'}
+                        </div>
                         
-                        {/* KOTAK ABU-ABU FULL FRAME & GAMBAR DI-ZOOM (SCALE) */}
-                        <div style={{ flex: 1, width: '100%', minHeight: '200px', backgroundColor: '#e2e8f0', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '15px', overflow: 'hidden' }}>
-                            {item.category === 'clothes' ? (
-                                <img 
-                                    src={`${IPFS_BASE}/${getFileName(itemName)}.png`} 
-                                    // Scale 2.5 akan nge-zoom gambar untuk membuang area transparan yang kosong
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain', transform: 'scale(1)' }} 
-                                    alt={itemName} 
-                                />
-                            ) : (
-                                <span style={{ color: '#94a3b8', fontWeight: 'bold' }}>Item Preview</span>
+                        <div style={{ flex: 1, width: '100%', minHeight: '200px', backgroundColor: '#e2e8f0', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '15px', overflow: 'hidden', position: 'relative' }}>
+                            <img 
+                                src={`${IPFS_BASE}/${folderName}/${encodeURIComponent(item.fileName)}.png`} 
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', transform: 'scale(1)' }} 
+                                alt={itemName} 
+                            />
+                            {/* Label penanda jika item sudah ada di Wardrobe */}
+                            {isOwned && (
+                                <div style={{ position: 'absolute', background: 'rgba(0,0,0,0.7)', color: 'white', padding: '5px 10px', borderRadius: '5px', fontWeight: 'bold', fontSize: '14px', letterSpacing: '1px' }}>
+                                    OWNED
+                                </div>
                             )}
                         </div>
                         
                         <div style={{ textAlign: 'center', marginTop: 'auto' }}>
                             <span style={{ fontWeight: 'bold', display: 'block', fontSize: '16px' }}>{itemName}</span>
-                            <span className="item-price" style={{ color: color, marginTop: '8px', display: 'block', fontSize: '14px' }}>{item.price} $babes</span>
+                            <span className="item-price" style={{ color: color, marginTop: '8px', display: 'block', fontSize: '14px' }}>
+                                {isOwned ? 'PURCHASED' : `${price} $babes`}
+                            </span>
                         </div>
                     </div>
                 );
@@ -86,11 +110,15 @@ export default function ShopModal({ gameState, updateGameState, showToast, onClo
                 <div style={{ textAlign: 'center', marginBottom: '20px', fontWeight: 800, color: 'var(--powder-pink)', fontSize: '18px' }}>
                     YOUR BALANCE: <span>{gameState.player.babes}</span> $babes
                 </div>
+                
+                {/* Menu Navigasi Sesuai Database */}
                 <div className="tab-container" style={{ maxWidth: '600px', margin: '0 auto 20px auto' }}>
-                    <button className={`tab-btn ${subTab === 'clothes' ? 'active' : ''}`} onClick={() => setSubTab('clothes')}>BIKINIS</button>
-                    <button className={`tab-btn ${subTab === 'accessories' ? 'active' : ''}`} onClick={() => setSubTab('accessories')}>TATTOOS</button>
-                    <button className={`tab-btn ${subTab === 'glasses' ? 'active' : ''}`} onClick={() => setSubTab('glasses')}>GLASSES</button>
+                    <button className={`tab-btn ${subTab === 'bikini' ? 'active' : ''}`} onClick={() => setSubTab('bikini')}>BIKINI</button>
+                    <button className={`tab-btn ${subTab === 'shades' ? 'active' : ''}`} onClick={() => setSubTab('shades')}>SHADES</button>
+                    <button className={`tab-btn ${subTab === 'necklace' ? 'active' : ''}`} onClick={() => setSubTab('necklace')}>NECKLACE</button>
+                    <button className={`tab-btn ${subTab === 'bracelet' ? 'active' : ''}`} onClick={() => setSubTab('bracelet')}>BRACELET</button>
                 </div>
+                
                 <div className="modal-section" style={{ flex: 1, overflowY: 'auto' }}>
                     <div className="item-grid">
                         {renderShopItems(subTab)}
