@@ -30,7 +30,6 @@ const defaultState = {
     stats: { babesEarned: 1000, itemsOwned: 0 }
 };
 
-// FUNGSI JEDAH WAKTU (DELAY) UNTUK MENGHINDARI RATE LIMIT ALCHEMY (429)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default function BabesMap() {
@@ -44,6 +43,9 @@ export default function BabesMap() {
     const [userNFTIds, setUserNFTIds] = useState([]);
     const [authStatus, setAuthStatus] = useState("loading"); 
     const [errorDetail, setErrorDetail] = useState(""); 
+
+    // STATE BARU UNTUK LOADING BAR WARDROBE
+    const [harvestProgress, setHarvestProgress] = useState({ current: 0, total: 0, active: false });
 
     // ULTIMATE DETECTION SYSTEM (SMART RADAR 666)
     useEffect(() => {
@@ -75,7 +77,6 @@ export default function BabesMap() {
 
                     balanceNum = Number(bal);
                     contract = c;
-                    console.log(`⚖️ NFT Balance detected: ${balanceNum}`);
                     break; 
                 } catch (err) {
                     lastErr = err;
@@ -83,7 +84,6 @@ export default function BabesMap() {
             }
 
             if (balanceNum === null) {
-                console.error("❌ All RPCs failed reading On-Chain:", lastErr);
                 setErrorDetail(lastErr?.message || String(lastErr));
                 setAuthStatus("error");
                 return;
@@ -101,9 +101,7 @@ export default function BabesMap() {
                     }
 
                     if (foundIds.length === 0) {
-                        console.warn(`📡 Activating Smart Radar with anti-rate-limit to find ${balanceNum} NFTs...`);
                         const MAX_SUPPLY = 666;
-                        // MODIFIKASI 1: BATCH DIPERKECIL JADI 10 AGAR SANGAT AMAN
                         const BATCH_SIZE = 10; 
 
                         for (let i = 1; i <= MAX_SUPPLY; i += BATCH_SIZE) {
@@ -120,28 +118,20 @@ export default function BabesMap() {
                             const results = await Promise.all(batch);
                             foundIds.push(...results.filter(res => res !== null));
 
-                            if (foundIds.length === balanceNum) {
-                                console.log("🎯 All NFTs found! Shutting down radar.");
-                                break; 
-                            }
-                            // MODIFIKASI 2: JEDA BATCH DINAIKKAN JADI 1 DETIK
+                            if (foundIds.length === balanceNum) break; 
                             await delay(1000);
                         }
                     }
 
                     if (foundIds.length === 0) foundIds = [{ id: 20 }]; 
-
-                    console.log("✅ Access Granted. Registered IDs:", foundIds);
                     setUserNFTIds(foundIds);
                     setAuthStatus("granted");
 
                 } else {
-                    console.warn("⛔ Access Denied. Smart contract states 0 balance.");
                     setUserNFTIds([]);
                     setAuthStatus("denied"); 
                 }
             } catch (err) {
-                console.error("❌ Fatal Error processing IDs:", err);
                 setErrorDetail(err?.message || String(err));
                 setAuthStatus("error");
             }
@@ -150,15 +140,19 @@ export default function BabesMap() {
         fetchRealAssets();
     }, [account?.address]); 
 
-    // AUTO-HARVESTER SCRIPT (DENGAN JEDAH WAKTU / THROTTLE AMAN DARI ERROR 429)
+    // AUTO-HARVESTER SCRIPT DENGAN UPDATE PROGRESS BAR
     useEffect(() => {
         if (userNFTIds.length === 0) return;
 
         async function harvestWardrobe() {
-            console.log("👗 Harvesting wardrobe safely with anti-429 delay...");
+            // TAMPILKAN LOADING BAR
+            setHarvestProgress({ current: 0, total: userNFTIds.length, active: true });
+            
             let newInventory = { bikini: [], shades: [], bracelet: [], necklace: [], piercing: [] };
             const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
             const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
+            
+            let count = 0;
 
             for (let nft of userNFTIds) {
                 try {
@@ -183,11 +177,17 @@ export default function BabesMap() {
                         });
                     }
 
-                    // MODIFIKASI 3: REM SUPER PAKEM! JEDA 2 DETIK (2000ms) SETIAP 1 NFT
+                    // Tambah hitungan dan update UI Loading Bar
+                    count++;
+                    setHarvestProgress({ current: count, total: userNFTIds.length, active: true });
+                    
                     await delay(2000);
 
                 } catch (e) {
                     console.error("❌ Failed to harvest item for NFT #" + nft.id, e);
+                    // Tetap hitung progres meskipun gagal agar bar tidak macet
+                    count++;
+                    setHarvestProgress({ current: count, total: userNFTIds.length, active: true });
                 }
             }
             
@@ -196,7 +196,11 @@ export default function BabesMap() {
                 localStorage.setItem('babesGameState', JSON.stringify(updatedState));
                 return updatedState;
             });
-            console.log("🛍️ Auto-Wardrobe filled safely:", newInventory);
+            
+            // SEMBUNYIKAN LOADING BAR SAAT SELESAI (dengan sedikit jeda agar pemain melihat bar penuh)
+            setTimeout(() => {
+                setHarvestProgress({ current: count, total: userNFTIds.length, active: false });
+            }, 1000);
         }
         harvestWardrobe();
     }, [userNFTIds]); 
@@ -222,18 +226,14 @@ export default function BabesMap() {
         toastTimeout = setTimeout(() => setToastMsg(''), 3000);
     };
 
-    // PARTICLE EFFECT COORDINATES
     const sparkles = [
-        // Waterfall
         { left: '30%', top: '35%', delay: '0s', size: '4px' },
         { left: '32%', top: '42%', delay: '0.5s', size: '5px' },
         { left: '27%', top: '48%', delay: '1s', size: '3px' },
-        // Ocean Left
         { left: '15%', top: '80%', delay: '0.2s', size: '5px' },
         { left: '25%', top: '88%', delay: '0.7s', size: '4px' },
         { left: '10%', top: '75%', delay: '1.2s', size: '6px' },
         { left: '35%', top: '92%', delay: '0.4s', size: '3px' },
-        // Ocean Right
         { left: '85%', top: '65%', delay: '0.3s', size: '4px' },
         { left: '90%', top: '72%', delay: '0.8s', size: '5px' },
         { left: '95%', top: '78%', delay: '1.1s', size: '4px' }
@@ -281,9 +281,13 @@ export default function BabesMap() {
 
     const activeTokenId = userNFTIds[selectedTokenIndex] ? userNFTIds[selectedTokenIndex].id : (userNFTIds[0]?.id || 0);
 
+    // KALKULASI PERSENTASE LOADING WARDROBE
+    const loadingPercentage = harvestProgress.total > 0 
+        ? Math.round((harvestProgress.current / harvestProgress.total) * 100) 
+        : 0;
+
     return (
         <>
-            {/* SPARKLES CSS ANIMATION */}
             <style>{`
                 @keyframes twinkle {
                     0%, 100% { opacity: 0; transform: scale(0.5); }
@@ -304,7 +308,37 @@ export default function BabesMap() {
             <div id="map-container">
                 <img id="map-frame" src="/frame2.webp" alt="Map Frame" />
                 
-                {/* MUSIC HUD */}
+                {/* WARDROBE HARVESTING LOADING BAR OVERLAY */}
+                {harvestProgress.active && (
+                    <div style={{
+                        position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                        background: 'rgba(17, 17, 17, 0.95)', padding: '30px', borderRadius: '20px',
+                        border: '4px solid var(--powder-pink)', zIndex: 9999, textAlign: 'center',
+                        width: '350px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                    }}>
+                        <h3 style={{ color: 'var(--vanilla-cream)', fontFamily: "'Lilita One', cursive", marginBottom: '5px', fontSize: '22px', letterSpacing: '1px' }}>
+                            UNPACKING WARDROBE
+                        </h3>
+                        <p style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '20px' }}>Syncing traits from blockchain (Safe Mode)</p>
+                        
+                        <div style={{ background: '#333', borderRadius: '15px', height: '24px', overflow: 'hidden', position: 'relative', border: '2px solid #555' }}>
+                            <div style={{
+                                background: 'linear-gradient(90deg, var(--powder-pink), var(--pale-marigold))', 
+                                height: '100%',
+                                width: `${loadingPercentage}%`,
+                                transition: 'width 0.5s ease-out'
+                            }} />
+                            <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: '#fff', fontSize: '11px', fontWeight: 'bold', textShadow: '1px 1px 2px #000' }}>
+                                {loadingPercentage}%
+                            </span>
+                        </div>
+                        
+                        <p style={{ color: 'var(--pale-marigold)', marginTop: '15px', fontSize: '14px', fontWeight: 'bold' }}>
+                            {harvestProgress.current} / {harvestProgress.total} NFTs Loaded
+                        </p>
+                    </div>
+                )}
+
                 <div style={{ position: 'absolute', bottom: '30px', left: '30px', zIndex: 50 }}>
                     <MusicHUD />
                 </div>
@@ -320,7 +354,6 @@ export default function BabesMap() {
                     </div>
                 </div>
 
-                {/* DAILY QUEST BUTTON */}
                 <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
                     <button className="btn btn-gold" onClick={() => setActiveModal('quest')} style={{ padding: '10px 20px', fontSize: '14px', boxShadow: '0 5px 0 #b38b36', letterSpacing: '1px', margin: 0 }}>
                         📜 DAILY QUESTS
@@ -329,18 +362,12 @@ export default function BabesMap() {
 
                 <img id="map-image" src="/map-babes.webp" alt="Babes Island Map" />
                 
-                {/* INJECT SPARKLES PARTICLES OVER THE MAP */}
                 {sparkles.map((s, i) => (
-                    <div key={i} className="sparkle-particle" style={{ 
-                        left: s.left, top: s.top, 
-                        width: s.size, height: s.size, 
-                        animation: `twinkle 2s infinite ease-in-out ${s.delay}` 
-                    }} />
+                    <div key={i} className="sparkle-particle" style={{ left: s.left, top: s.top, width: s.size, height: s.size, animation: `twinkle 2s infinite ease-in-out ${s.delay}` }} />
                 ))}
 
                 <img id="airplane" src="/plane.webp" alt="Flying Plane" />
                 
-                {/* CALIBRATED BUILDING LABELS */}
                 <div className="building-label" style={{ left: '48%', top: '57%' }} onClick={() => setActiveModal('shop')}>THE SHOP</div>
                 <div className="building-label" style={{ left: '54%', top: '62%' }} onClick={() => setActiveModal('guard')}>GUARD TOWER</div>
                 <div className="building-label" style={{ left: '61%', top: '45%' }} onClick={() => setActiveModal('cafe')}>THE CAFE</div>
@@ -350,7 +377,6 @@ export default function BabesMap() {
 
             {activeModal && <div id="modal-overlay" style={{ display: 'block', opacity: 1 }} onClick={() => setActiveModal(null)}></div>}
             
-            {/* RENDER ALL MODALS */}
             {activeModal === 'hut' && <HutModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} userNFTs={userNFTIds} selectedTokenIndex={selectedTokenIndex} setSelectedTokenIndex={setSelectedTokenIndex} onClose={() => setActiveModal(null)} />}
             {activeModal === 'shop' && <ShopModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
             {activeModal === 'cafe' && <CafeModal gameState={gameState} updateGameState={updateGameState} showToast={showToast} onClose={() => setActiveModal(null)} />}
