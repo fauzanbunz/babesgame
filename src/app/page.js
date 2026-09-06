@@ -103,7 +103,8 @@ export default function BabesMap() {
                     if (foundIds.length === 0) {
                         console.warn(`📡 Activating Smart Radar with anti-rate-limit to find ${balanceNum} NFTs...`);
                         const MAX_SUPPLY = 666;
-                        const BATCH_SIZE = 25; // Diperkecil sedikit agar aman
+                        // MODIFIKASI 1: BATCH DIPERKECIL JADI 10 AGAR SANGAT AMAN
+                        const BATCH_SIZE = 10; 
 
                         for (let i = 1; i <= MAX_SUPPLY; i += BATCH_SIZE) {
                             const batch = [];
@@ -123,8 +124,8 @@ export default function BabesMap() {
                                 console.log("🎯 All NFTs found! Shutting down radar.");
                                 break; 
                             }
-                            // Jeda 500ms antar batch radar agar tidak kena 429
-                            await delay(500);
+                            // MODIFIKASI 2: JEDA BATCH DINAIKKAN JADI 1 DETIK
+                            await delay(1000);
                         }
                     }
 
@@ -159,7 +160,6 @@ export default function BabesMap() {
             const chain = makeRobinhoodChain(RPC_ENDPOINTS[0]);
             const nftContract = getContract({ client: client, chain: chain, address: NFT_CONTRACT_ADDRESS });
 
-            // Menggunakan for...of loop agar bisa diberi jeda (delay) satu per satu
             for (let nft of userNFTIds) {
                 try {
                     const uri = await readContract({
@@ -183,8 +183,8 @@ export default function BabesMap() {
                         });
                     }
 
-                    // REM UTAMA: Istirahat 1000ms (1 detik) setiap selesai mengambil 1 NFT metadata
-                    await delay(1000);
+                    // MODIFIKASI 3: REM SUPER PAKEM! JEDA 2 DETIK (2000ms) SETIAP 1 NFT
+                    await delay(2000);
 
                 } catch (e) {
                     console.error("❌ Failed to harvest item for NFT #" + nft.id, e);
